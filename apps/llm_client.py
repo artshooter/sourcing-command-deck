@@ -6,6 +6,7 @@ Includes simple circuit breaker: after 3 consecutive failures,
 disable LLM calls for 5 minutes.
 """
 import json
+import re
 import time
 import urllib.request
 import urllib.error
@@ -87,8 +88,9 @@ def chat_completion(messages, model=None, temperature=0.3, max_tokens=2048):
 def chat_completion_json(messages, model=None, temperature=0.1, max_tokens=2048):
     """Send a chat completion request and parse the response as JSON dict."""
     content = chat_completion(messages, model=model, temperature=temperature, max_tokens=max_tokens)
+    # Strip <think>...</think> reasoning blocks (e.g. MiniMax-M2.5)
+    text = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
     # Strip markdown code fence if present
-    text = content.strip()
     if text.startswith('```'):
         first_nl = text.index('\n') if '\n' in text else 3
         text = text[first_nl + 1:]
