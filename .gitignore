@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.DS_Store
+apps/sourcing-web/runs/
+apps/sourcing-web/uploads/
