@@ -95,17 +95,25 @@ def main():
     cookie = read_cookie(Path(args.cookie_file))
     last_err = None
     obj = None
+    blocked = False
     for attempt in range(1, args.retries + 1):
         try:
-            obj = call_1688(args.query, cookie, args.begin_page, args.page_size)
-            # successful-looking payload: refresh cache
+            raw = call_1688(args.query, cookie, args.begin_page, args.page_size)
+            ret = raw.get('ret') or []
+            # Cookie blocked by risk control — no point retrying
+            if any('FAIL_SYS_USER_VALIDATE' in r for r in ret):
+                blocked = True
+                last_err = 'FAIL_SYS_USER_VALIDATE'
+                obj = raw
+                break
             try:
-                offer = obj.get('data', {}).get('data', {}).get('OFFER', {})
-                if cache_path and offer.get('items'):
-                    cache_path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding='utf-8')
+                offer = raw.get('data', {}).get('data', {}).get('OFFER', {})
+                if offer.get('items'):
+                    obj = raw
+                    if cache_path:
+                        cache_path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding='utf-8')
                     break
                 else:
-                    # got a response but not a usable offer list; keep trying / allow cache fallback
                     obj = None
             except Exception:
                 obj = None
@@ -115,7 +123,7 @@ def main():
             last_err = str(e)
             time.sleep(min(2 * attempt, 6))
 
-    if obj is None and cache_path and cache_path.exists():
+    if obj is None and not blocked and cache_path and cache_path.exists():
         obj = json.loads(cache_path.read_text(encoding='utf-8'))
         obj['_from_cache'] = True
 
