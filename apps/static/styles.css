@@ -179,7 +179,7 @@ h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
 /* ─── Command Layout (3-col) ─── */
 .command-layout {
   display: grid;
-  grid-template-columns: 480px minmax(0, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
   align-items: stretch;
   animation: fadeInUp .65s var(--ease) .2s both;
@@ -187,7 +187,8 @@ h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
 
 /* ─── Side Panels ─── */
 .agent-panel, .flow-panel { padding: 22px; display: flex; flex-direction: column; justify-content: center; }
-.hero-center { display: flex; flex-direction: column; }
+.hero-center { display: flex; flex-direction: column; height: 100%; }
+.hero-center .mission-panel { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 
 .eyebrow {
   font-size: 18px; font-weight: 800; letter-spacing: 0.2em;
@@ -586,7 +587,7 @@ input[type="number"]:focus, input[type="text"]:focus {
 
 /* ─── Responsive ─── */
 @media (max-width: 1380px) {
-  .command-layout { grid-template-columns: 380px minmax(0, 1fr); }
+  .command-layout { grid-template-columns: 1fr 1fr; }
   .deck-layout { grid-template-columns: 260px minmax(0, 1fr) 300px; }
 }
 
