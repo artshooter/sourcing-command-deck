@@ -11,80 +11,60 @@
   <div class="grid"></div>
 
   <main class="page-shell">
-    <section class="hero command-layout">
-      <aside class="hero-side glow-card agent-panel">
-        <div class="eyebrow">智能体编组</div>
+    <header class="top-bar">
+      <img src="/logo.webp" alt="Savana" class="brand-logo" />
+    </header>
+
+    <section class="hero-banner">
+      <h1>企划定向，智能寻源</h1>
+      <p class="hero-desc">
+        仅需上传企划文件，AI自主完成企划理解、商家寻源与匹配评估
+      </p>
+    </section>
+
+    <section class="command-layout">
+      <aside class="glow-card agent-panel">
+        <div class="eyebrow">智能Agent</div>
         <div class="agent-list">
           <article class="agent-card">
-            <div class="agent-name">企划理解智能体</div>
-            <div class="agent-desc">读取企划、识别结构、拆解企划款。</div>
+            <div class="agent-name">企划理解</div>
+            <div class="agent-desc">读取企划、识别结构、拆解企划款</div>
           </article>
           <article class="agent-card">
-            <div class="agent-name">寻源执行智能体</div>
-            <div class="agent-desc">自动召回候选供应商与样本商品。</div>
+            <div class="agent-name">自动寻源</div>
+            <div class="agent-desc">自动召回候选供应商与样本商品</div>
           </article>
           <article class="agent-card">
-            <div class="agent-name">评分决策智能体</div>
-            <div class="agent-desc">评估匹配质量，输出 A/B/C 推荐层级。</div>
-          </article>
-          <article class="agent-card">
-            <div class="agent-name">输出汇报智能体</div>
-            <div class="agent-desc">生成可执行的决策界面与下一步建议。</div>
+            <div class="agent-name">分层推荐</div>
+            <div class="agent-desc">评估匹配质量，输出 A/B/C 推荐层级</div>
           </article>
         </div>
       </aside>
 
-      <section class="hero-copy hero-center">
-        <div class="eyebrow">SOURCE COMMAND DECK</div>
-        <h1>从企划出发，启动智能寻源作战</h1>
-        <p class="hero-desc">
-          上传企划，智能完成企划理解、供应商召回、匹配评估与结果输出。
-        </p>
-        <div class="hero-pills">
-          <span>企划款自动拆解</span>
-          <span>A/B/C 分层推荐</span>
-          <span>风险可解释</span>
-          <span>决策面板输出</span>
-        </div>
-
+      <section class="hero-center">
         <div class="mission-panel glow-card">
           <div class="panel-header">
             <span class="dot"></span>
-            <span>任务投递面板</span>
+            <span>开启入口</span>
           </div>
           <form id="uploadForm" class="upload-form">
             <label class="dropzone" for="planning_file">
               <input id="planning_file" name="planning_file" type="file" accept=".xlsx" required />
               <div class="dropzone-inner">
+                <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M24 32V16M24 16L18 22M24 16L30 22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M8 30V36C8 38.2091 9.79086 40 12 40H36C38.2091 40 40 38.2091 40 36V30" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
                 <div class="dropzone-title">拖入企划文件，或点此选择</div>
-                <div class="dropzone-subtitle">仅支持固定模板 Excel（.xlsx）</div>
+                <div class="dropzone-subtitle">请按照模版填写并导入企划文件(.xlsx)</div>
               </div>
             </label>
 
-            <div class="verify-strip">
-              <div class="verify-chip">模板校验</div>
-              <div class="verify-chip">企划款识别</div>
-              <div class="verify-chip">结果分层输出</div>
-            </div>
 
-            <div class="form-grid">
-              <label>
-                <span>优先跑多少个企划款</span>
-                <input name="max_items" type="number" min="1" max="20" value="5" />
-              </label>
-              <label>
-                <span>每个企划款 query 数</span>
-                <input name="queries" type="number" min="1" max="5" value="2" />
-              </label>
-              <label>
-                <span>每个 query 页数</span>
-                <input name="pages" type="number" min="1" max="3" value="1" />
-              </label>
-              <label>
-                <span>每个企划款保留商家数</span>
-                <input name="top_k" type="number" min="1" max="20" value="10" />
-              </label>
-            </div>
+            <input name="max_items" type="hidden" value="5" />
+            <input name="queries" type="hidden" value="2" />
+            <input name="pages" type="hidden" value="1" />
+            <input name="top_k" type="hidden" value="10" />
 
             <label>
               <span>Cookie 文件路径（默认已填）</span>
@@ -92,32 +72,10 @@
             </label>
 
             <button id="submitBtn" class="primary-btn" type="submit">开始智能寻源</button>
-            <p class="helper-text">如果模板不符合要求，系统会在校验阶段直接拦下，不进入后续寻源。</p>
           </form>
         </div>
       </section>
 
-      <aside class="hero-side glow-card flow-panel">
-        <div class="eyebrow">作战进程</div>
-        <div class="flow-list">
-          <article class="flow-card">
-            <div class="flow-title">企划已解析</div>
-            <div class="flow-desc">读取文件，识别企划款与核心约束。</div>
-          </article>
-          <article class="flow-card">
-            <div class="flow-title">寻源执行中</div>
-            <div class="flow-desc">自动召回候选供应商与商品样本。</div>
-          </article>
-          <article class="flow-card">
-            <div class="flow-title">匹配质量评估中</div>
-            <div class="flow-desc">按风格、价格、细节与风险打分。</div>
-          </article>
-          <article class="flow-card">
-            <div class="flow-title">决策面板已生成</div>
-            <div class="flow-desc">输出可直接使用的供应商决策界面。</div>
-          </article>
-        </div>
-      </aside>
     </section>
 
     <section id="statusSection" class="status-section hidden">
