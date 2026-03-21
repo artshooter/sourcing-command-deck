@@ -81,27 +81,47 @@ def load_job(job_id):
 
 def summarize_suppliers(top_suppliers):
     level_counts = {'A': 0, 'B': 0, 'C': 0, 'other': 0}
-    top_cards = []
+    grouped_cards = {'A': [], 'B': [], 'C': [], 'other': []}
     for row in top_suppliers or []:
         level = row.get('recommendation_level') or 'other'
         if level not in level_counts:
             level = 'other'
         level_counts[level] += 1
-        if len(top_cards) < 6:
-            top_cards.append({
-                'supplier_name': row.get('supplier_name', ''),
-                'product_title': row.get('product_title', ''),
-                'product_image': row.get('product_image', ''),
-                'price_fit_guess': row.get('price_fit_guess', ''),
-                'score_total': row.get('score_total'),
-                'recommendation_level': row.get('recommendation_level', ''),
-                'recommend_reasons': row.get('recommend_reasons', [])[:3],
-                'risk_warnings': row.get('risk_warnings', [])[:2],
-                'source_url': row.get('source_url', ''),
-                'shop_url': row.get('shop_url', ''),
-                'supplier_profile_summary': row.get('supplier_profile_summary', ''),
-            })
-    return level_counts, top_cards
+
+        score_breakdown = row.get('score_breakdown', {}) or {}
+        risk_penalty = abs(score_breakdown.get('risk_penalty', 0) or 0)
+        radar = {
+            '风格匹配度': max(5, min(100, int((score_breakdown.get('theme_style', 0) or 0) / 40.0 * 100))),
+            '价格匹配度': max(5, min(100, int((score_breakdown.get('price_fit', 0) or 0) / 15.0 * 100))),
+            '细节契合度': max(5, min(100, int((score_breakdown.get('fabric_detail', 0) or 0) / 15.0 * 100))),
+            '供应可靠度': max(5, min(100, int((score_breakdown.get('credibility', 0) or 0) / 10.0 * 100))),
+            '风险可控度': max(5, min(100, 100 - int(risk_penalty / 15.0 * 100))),
+        }
+
+        ai_judgement = '可作为补充储备，建议先保留观察'
+        if level == 'A':
+            ai_judgement = '风格与价格带匹配度较高，建议优先推进'
+        elif level == 'B':
+            ai_judgement = '已有一定匹配度，建议重点复核后推进'
+
+        grouped_cards[level].append({
+            'supplier_name': row.get('supplier_name', ''),
+            'product_title': row.get('product_title', ''),
+            'product_image': row.get('product_image', ''),
+            'price_fit_guess': row.get('price_fit_guess', ''),
+            'score_total': row.get('score_total'),
+            'recommendation_level': row.get('recommendation_level', ''),
+            'recommend_reasons': row.get('recommend_reasons', [])[:3],
+            'risk_warnings': row.get('risk_warnings', [])[:3],
+            'source_url': row.get('source_url', ''),
+            'shop_url': row.get('shop_url', ''),
+            'supplier_profile_summary': row.get('supplier_profile_summary', ''),
+            'ai_judgement': ai_judgement,
+            'profile_summary': row.get('profile_summary', ''),
+            'radar': radar,
+            'score_breakdown': score_breakdown,
+        })
+    return level_counts, grouped_cards
 
 
 def build_dashboard(job_dir, auto_summary):
@@ -117,6 +137,8 @@ def build_dashboard(job_dir, auto_summary):
     result_cards = []
     total_a = total_b = total_c = total_other = 0
     strong_count = weak_count = empty_count = rerun_count = 0
+    matched_count = 0
+    fallback_count = 0
 
     for result in batch_results:
         item_index = result.get('item_index')
@@ -124,7 +146,7 @@ def build_dashboard(job_dir, auto_summary):
         top_json = result.get('top_json')
         top_data = read_json(Path(top_json), {}) if top_json else {}
         top_suppliers = top_data.get('top_suppliers', []) or []
-        level_counts, supplier_cards = summarize_suppliers(top_suppliers)
+        level_counts, supplier_groups = summarize_suppliers(top_suppliers)
         total_a += level_counts['A']
         total_b += level_counts['B']
         total_c += level_counts['C']
@@ -137,12 +159,24 @@ def build_dashboard(job_dir, auto_summary):
         if top_count >= 3:
             quality = 'strong'
             strong_count += 1
+            matched_count += 1
         elif top_count > 0:
             quality = 'weak'
             weak_count += 1
+            matched_count += 1
         else:
             quality = 'empty'
             empty_count += 1
+
+        recommended_action = '建议继续观察'
+        if quality == 'strong':
+            recommended_action = '优先推进A类供应商'
+        elif quality == 'weak':
+            recommended_action = '重点复核后推进'
+        elif quality == 'empty' and second_pass_used:
+            recommended_action = '建议补其他渠道'
+            fallback_count += 1
+
         result_cards.append({
             'item_index': item_index,
             'theme': brief_item.get('theme') or (result.get('brief_summary', '').split('|')[2].strip() if '|' in result.get('brief_summary', '') else ''),
@@ -157,11 +191,12 @@ def build_dashboard(job_dir, auto_summary):
             'quality': quality,
             'second_pass_used': second_pass_used,
             'second_pass_still_empty': bool(second_pass and not second_pass.get('top_count')),
-            'recommended_action': '建议补其他渠道' if quality == 'empty' and second_pass_used else ('优先联系' if quality == 'strong' else ('人工复核/谈价' if quality == 'weak' else '继续观察')),
+            'recommended_action': recommended_action,
+            'ai_summary': '当前匹配度较高，建议优先推进' if quality == 'strong' else ('已有可跟进候选，建议重点复核' if quality == 'weak' else '当前渠道结果偏弱，建议补其他渠道'),
             'a_count': level_counts['A'],
             'b_count': level_counts['B'],
             'c_count': level_counts['C'],
-            'supplier_cards': supplier_cards,
+            'supplier_groups': supplier_groups,
             'shortlist_md': read_text(Path(result.get('shortlist_md'))) if result.get('shortlist_md') else '',
         })
 
@@ -180,6 +215,8 @@ def build_dashboard(job_dir, auto_summary):
             'weak_count': weak_count,
             'empty_count': empty_count,
             'rerun_count': rerun_count,
+            'matched_count': matched_count,
+            'fallback_count': fallback_count,
             'supplier_counts': {
                 'A': total_a,
                 'B': total_b,

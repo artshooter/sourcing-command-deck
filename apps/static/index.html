@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sourcing Command Deck</title>
+  <title>寻源作战台</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -11,71 +11,122 @@
   <div class="grid"></div>
 
   <main class="page-shell">
-    <section class="hero">
-      <div class="hero-copy">
-        <div class="eyebrow">PLAN → SOURCE → DECIDE</div>
-        <h1>企划寻源作战台</h1>
+    <section class="hero command-layout">
+      <aside class="hero-side glow-card agent-panel">
+        <div class="eyebrow">智能体编组</div>
+        <div class="agent-list">
+          <article class="agent-card">
+            <div class="agent-name">企划理解智能体</div>
+            <div class="agent-desc">读取企划、识别结构、拆解企划款。</div>
+          </article>
+          <article class="agent-card">
+            <div class="agent-name">寻源执行智能体</div>
+            <div class="agent-desc">自动召回候选供应商与样本商品。</div>
+          </article>
+          <article class="agent-card">
+            <div class="agent-name">评分决策智能体</div>
+            <div class="agent-desc">评估匹配质量，输出 A/B/C 推荐层级。</div>
+          </article>
+          <article class="agent-card">
+            <div class="agent-name">输出汇报智能体</div>
+            <div class="agent-desc">生成可执行的决策界面与下一步建议。</div>
+          </article>
+        </div>
+      </aside>
+
+      <section class="hero-copy hero-center">
+        <div class="eyebrow">SOURCE COMMAND DECK</div>
+        <h1>从企划出发，启动智能寻源作战</h1>
         <p class="hero-desc">
-          上传标准企划 Excel，直接启用现有 sourcing workflow。页面会先校验企划结构，再执行自动批量寻源，并把结果渲染成一个可交互的视觉化决策界面。
+          上传企划，智能完成企划理解、供应商召回、匹配评估与结果输出。
         </p>
         <div class="hero-pills">
-          <span>固定模板 .xlsx</span>
-          <span>自动优先级</span>
-          <span>1688 候选召回</span>
-          <span>A/B/C 推荐分层</span>
+          <span>企划款自动拆解</span>
+          <span>A/B/C 分层推荐</span>
+          <span>风险可解释</span>
+          <span>决策面板输出</span>
         </div>
-      </div>
-      <div class="hero-panel glow-card">
-        <div class="panel-header">
-          <span class="dot"></span>
-          <span>Mission Entry</span>
-        </div>
-        <form id="uploadForm" class="upload-form">
-          <label class="dropzone" for="planning_file">
-            <input id="planning_file" name="planning_file" type="file" accept=".xlsx" required />
-            <div class="dropzone-inner">
-              <div class="dropzone-title">拖入企划文件，或点此选择</div>
-              <div class="dropzone-subtitle">仅支持固定模板 Excel（.xlsx）</div>
-            </div>
-          </label>
 
-          <div class="form-grid">
-            <label>
-              <span>优先跑多少个 item</span>
-              <input name="max_items" type="number" min="1" max="20" value="5" />
-            </label>
-            <label>
-              <span>每个 item query 数</span>
-              <input name="queries" type="number" min="1" max="5" value="2" />
-            </label>
-            <label>
-              <span>每个 query 页数</span>
-              <input name="pages" type="number" min="1" max="3" value="1" />
-            </label>
-            <label>
-              <span>Top K 商家数</span>
-              <input name="top_k" type="number" min="1" max="20" value="10" />
-            </label>
+        <div class="mission-panel glow-card">
+          <div class="panel-header">
+            <span class="dot"></span>
+            <span>任务投递面板</span>
           </div>
+          <form id="uploadForm" class="upload-form">
+            <label class="dropzone" for="planning_file">
+              <input id="planning_file" name="planning_file" type="file" accept=".xlsx" required />
+              <div class="dropzone-inner">
+                <div class="dropzone-title">拖入企划文件，或点此选择</div>
+                <div class="dropzone-subtitle">仅支持固定模板 Excel（.xlsx）</div>
+              </div>
+            </label>
 
-          <label>
-            <span>Cookie 文件路径（默认已填）</span>
-            <input name="cookie_path" type="text" value="/root/.openclaw/workspace/secrets/1688-cookie.txt" />
-          </label>
+            <div class="verify-strip">
+              <div class="verify-chip">模板校验</div>
+              <div class="verify-chip">企划款识别</div>
+              <div class="verify-chip">结果分层输出</div>
+            </div>
 
-          <button id="submitBtn" class="primary-btn" type="submit">启动寻源工作流</button>
-          <p class="helper-text">模板不合格时会在校验阶段直接拦下，不会进入寻源。</p>
-        </form>
-      </div>
+            <div class="form-grid">
+              <label>
+                <span>优先跑多少个企划款</span>
+                <input name="max_items" type="number" min="1" max="20" value="5" />
+              </label>
+              <label>
+                <span>每个企划款 query 数</span>
+                <input name="queries" type="number" min="1" max="5" value="2" />
+              </label>
+              <label>
+                <span>每个 query 页数</span>
+                <input name="pages" type="number" min="1" max="3" value="1" />
+              </label>
+              <label>
+                <span>每个企划款保留商家数</span>
+                <input name="top_k" type="number" min="1" max="20" value="10" />
+              </label>
+            </div>
+
+            <label>
+              <span>Cookie 文件路径（默认已填）</span>
+              <input name="cookie_path" type="text" value="/root/.openclaw/workspace/secrets/1688-cookie.txt" />
+            </label>
+
+            <button id="submitBtn" class="primary-btn" type="submit">开始智能寻源</button>
+            <p class="helper-text">如果模板不符合要求，系统会在校验阶段直接拦下，不进入后续寻源。</p>
+          </form>
+        </div>
+      </section>
+
+      <aside class="hero-side glow-card flow-panel">
+        <div class="eyebrow">作战进程</div>
+        <div class="flow-list">
+          <article class="flow-card">
+            <div class="flow-title">企划已解析</div>
+            <div class="flow-desc">读取文件，识别企划款与核心约束。</div>
+          </article>
+          <article class="flow-card">
+            <div class="flow-title">寻源执行中</div>
+            <div class="flow-desc">自动召回候选供应商与商品样本。</div>
+          </article>
+          <article class="flow-card">
+            <div class="flow-title">匹配质量评估中</div>
+            <div class="flow-desc">按风格、价格、细节与风险打分。</div>
+          </article>
+          <article class="flow-card">
+            <div class="flow-title">决策面板已生成</div>
+            <div class="flow-desc">输出可直接使用的供应商决策界面。</div>
+          </article>
+        </div>
+      </aside>
     </section>
 
     <section id="statusSection" class="status-section hidden">
       <div class="section-title-row">
         <div>
-          <div class="eyebrow">WORKFLOW STATUS</div>
-          <h2>任务执行中</h2>
+          <div class="eyebrow">任务执行状态</div>
+          <h2>智能体正在处理本次寻源任务</h2>
         </div>
-        <div id="jobBadge" class="job-badge">Queued</div>
+        <div id="jobBadge" class="job-badge">任务队列中</div>
       </div>
 
       <div class="status-grid">
@@ -87,7 +138,7 @@
             </svg>
             <div class="ring-center">
               <div id="progressValue" class="progress-value">0%</div>
-              <div class="progress-label">mission</div>
+              <div class="progress-label">当前进度</div>
             </div>
           </div>
           <div>
@@ -98,9 +149,9 @@
         <div class="glow-card preview-card">
           <div class="panel-header">
             <span class="dot"></span>
-            <span>解析预览</span>
+            <span>企划解析预览</span>
           </div>
-          <div id="previewBox" class="preview-box muted">上传后会在这里显示解析到的 item 预览。</div>
+          <div id="previewBox" class="preview-box muted">上传后会在这里显示识别到的企划款预览。</div>
         </div>
       </div>
     </section>
@@ -108,19 +159,39 @@
     <section id="resultsSection" class="results-section hidden">
       <div class="section-title-row">
         <div>
-          <div class="eyebrow">RESULT COMMAND DECK</div>
-          <h2>寻源结果总览</h2>
+          <div class="eyebrow">结果作战面板</div>
+          <h2>寻源决策总览</h2>
         </div>
       </div>
 
       <div id="overviewCards" class="overview-grid"></div>
-      <div id="plannedStrip" class="planned-strip"></div>
-      <div id="resultCards" class="result-cards"></div>
+
+      <section class="deck-layout">
+        <aside class="glow-card item-sidebar">
+          <div class="panel-header"><span class="dot"></span><span>企划款列表</span></div>
+          <div id="plannedStrip" class="planned-strip vertical"></div>
+        </aside>
+
+        <section class="deck-main">
+          <div id="currentBriefCard" class="glow-card current-brief-card"></div>
+
+          <div class="glow-card tier-panel">
+            <div class="panel-header"><span class="dot"></span><span>供应商分层</span></div>
+            <div id="tierTabs" class="tier-tabs"></div>
+            <div id="supplierGrid" class="supplier-grid"></div>
+          </div>
+        </section>
+
+        <aside class="glow-card insight-panel">
+          <div class="panel-header"><span class="dot"></span><span>供应商洞察</span></div>
+          <div id="insightPanel" class="insight-body muted">请选择右侧供应商卡片查看评分雷达图与判断。</div>
+        </aside>
+      </section>
 
       <div class="glow-card markdown-card">
         <div class="panel-header">
           <span class="dot"></span>
-          <span>批量汇总（raw markdown）</span>
+          <span>批量汇总（原始 markdown）</span>
         </div>
         <pre id="summaryMarkdown" class="markdown-pre"></pre>
       </div>

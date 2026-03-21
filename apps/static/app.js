@@ -10,11 +10,18 @@ const ringFg = document.getElementById('ringFg');
 const jobBadge = document.getElementById('jobBadge');
 const overviewCards = document.getElementById('overviewCards');
 const plannedStrip = document.getElementById('plannedStrip');
-const resultCards = document.getElementById('resultCards');
+const currentBriefCard = document.getElementById('currentBriefCard');
+const tierTabs = document.getElementById('tierTabs');
+const supplierGrid = document.getElementById('supplierGrid');
+const insightPanel = document.getElementById('insightPanel');
 const summaryMarkdown = document.getElementById('summaryMarkdown');
 
 const RING_LENGTH = 301.59;
 let pollTimer = null;
+let currentResult = null;
+let activePlanIndex = 0;
+let activeTier = 'A';
+let activeSupplierIndex = 0;
 
 function setProgress(value) {
   const v = Math.max(0, Math.min(100, Number(value || 0)));
@@ -33,16 +40,16 @@ function formatDemand(obj) {
 
 function qualityLabel(q) {
   if (q === 'strong') return '强匹配';
-  if (q === 'weak') return '可用但需复核';
-  return '空结果 / 转其他渠道';
+  if (q === 'weak') return '待复核';
+  return '建议补渠道';
 }
 
 function renderPreview(preview) {
   if (!preview) {
-    previewBox.textContent = '上传后会在这里显示解析到的 item 预览。';
+    previewBox.textContent = '上传后会在这里显示识别到的企划款预览。';
     return;
   }
-  const lines = [`识别到 ${preview.item_count} 个企划 item`, ''];
+  const lines = [`识别到 ${preview.item_count} 个企划款`, ''];
   (preview.preview_items || []).forEach((item, idx) => {
     lines.push(`${idx + 1}. ${item.theme || '未识别主题'}`);
     lines.push(`   ${item.brief_summary || ''}`);
@@ -54,12 +61,10 @@ function renderOverview(result) {
   const overview = result.overview || {};
   const supplierCounts = overview.supplier_counts || {};
   const cards = [
-    ['总 item 数', overview.total_items || 0, '企划中解析出的总主题数'],
-    ['本轮已跑', overview.selected_count || 0, '本次优先执行的 item'],
-    ['强匹配', overview.strong_count || 0, '推荐优先联系'],
-    ['待复核', overview.weak_count || 0, '有命中但需要人工判断'],
-    ['空结果', overview.empty_count || 0, '两轮仍空时建议换渠道'],
-    ['供应商池', (supplierCounts.A || 0) + (supplierCounts.B || 0) + (supplierCounts.C || 0), `A:${supplierCounts.A || 0} / B:${supplierCounts.B || 0} / C:${supplierCounts.C || 0}`],
+    ['企划款总数', overview.total_items || 0, '本次任务识别出的企划款数量'],
+    ['已命中企划款', overview.matched_count || 0, '已找到可用结果的企划款数量'],
+    ['A类供应商数', supplierCounts.A || 0, '建议优先推进的供应商数量'],
+    ['建议补渠道企划款', overview.fallback_count || 0, '当前渠道匹配不足，建议补其他渠道'],
   ];
   overviewCards.innerHTML = cards.map(([label, value, sub]) => `
     <article class="overview-card">
@@ -70,72 +75,228 @@ function renderOverview(result) {
   `).join('');
 }
 
-function renderPlannedItems(items) {
-  plannedStrip.innerHTML = (items || []).map((item) => `
-    <article class="planned-item">
-      <div class="score">Priority ${escapeHtml(String(item.priority_score || 0))}</div>
-      <div class="theme">${escapeHtml(item.theme || '未命名主题')}</div>
-      <div class="muted">#${escapeHtml(String(item.item_index || ''))} · ${escapeHtml(item.market || '')}</div>
-      <div class="reasons">${escapeHtml((item.priority_reasons || []).join(' / '))}</div>
-    </article>
-  `).join('');
-}
-
-function renderSupplierCard(card) {
-  const img = card.product_image ? `<img class="supplier-image" src="${card.product_image}" alt="">` : '<div class="supplier-image"></div>';
-  const reasons = (card.recommend_reasons || []).length
-    ? `<ul class="reasons-list">${card.recommend_reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>`
-    : '';
-  return `
-    <article class="supplier-card">
-      ${img}
-      <div class="supplier-body">
-        <div class="overview-label level-${escapeHtml(card.recommendation_level || '')}">Level ${escapeHtml(card.recommendation_level || '-')}</div>
-        <div class="supplier-name">${escapeHtml(card.supplier_name || '未命名商家')}</div>
-        <div class="supplier-title">${escapeHtml(card.product_title || '')}</div>
-        <div class="muted">${escapeHtml(card.supplier_profile_summary || '')}</div>
-        <div class="chips">
-          <span class="chip">分数 ${escapeHtml(String(card.score_total || '—'))}</span>
-          <span class="chip">价格 ${escapeHtml(card.price_fit_guess || '—')}</span>
-        </div>
-        ${reasons}
-        <div class="supplier-links">
-          ${card.source_url ? `<a href="${card.source_url}" target="_blank" rel="noreferrer">商品链接</a>` : ''}
-          ${card.shop_url ? `<a href="${card.shop_url}" target="_blank" rel="noreferrer">店铺链接</a>` : ''}
-        </div>
+function renderPlanList(cards) {
+  plannedStrip.innerHTML = cards.map((card, index) => `
+    <article class="planned-item ${index === activePlanIndex ? 'active' : ''}" data-plan-index="${index}">
+      <div class="planned-top">
+        <div class="theme">${escapeHtml(card.theme || '未命名企划款')}</div>
+        <div class="quality-badge quality-${escapeHtml(card.quality || 'empty')}">${escapeHtml(qualityLabel(card.quality))}</div>
+      </div>
+      <div class="muted small-gap">${escapeHtml(card.price_band_raw || '价格带待定')}</div>
+      <div class="reasons">面料：${escapeHtml((card.fabrics || []).join(' / ') || '—')}</div>
+      <div class="reasons">元素：${escapeHtml((card.elements || []).join(' / ') || '—')}</div>
+      <div class="plan-bottom">
+        <span class="mini-stat">A类 ${escapeHtml(String(card.a_count || 0))}</span>
+        <span class="mini-stat">B类 ${escapeHtml(String(card.b_count || 0))}</span>
+        <span class="mini-stat">C类 ${escapeHtml(String(card.c_count || 0))}</span>
       </div>
     </article>
+  `).join('');
+
+  plannedStrip.querySelectorAll('[data-plan-index]').forEach((el) => {
+    el.addEventListener('click', () => {
+      activePlanIndex = Number(el.getAttribute('data-plan-index'));
+      activeTier = 'A';
+      activeSupplierIndex = 0;
+      renderDeck();
+    });
+  });
+}
+
+function renderBriefCard(card) {
+  currentBriefCard.innerHTML = `
+    <div class="panel-header"><span class="dot"></span><span>当前企划款概览</span></div>
+    <div class="brief-title-row">
+      <div>
+        <div class="result-title">${escapeHtml(card.theme || '未命名企划款')}</div>
+        <div class="result-meta">${escapeHtml(card.brief_summary || '')}</div>
+      </div>
+      <div class="quality-badge quality-${escapeHtml(card.quality || 'empty')}">${escapeHtml(qualityLabel(card.quality))}</div>
+    </div>
+    <div class="brief-grid">
+      <div class="brief-cell"><div class="label">价格带</div><div class="value">${escapeHtml(card.price_band_raw || '—')}</div></div>
+      <div class="brief-cell"><div class="label">面料关键词</div><div class="value">${escapeHtml((card.fabrics || []).join(' / ') || '—')}</div></div>
+      <div class="brief-cell"><div class="label">元素关键词</div><div class="value">${escapeHtml((card.elements || []).join(' / ') || '—')}</div></div>
+      <div class="brief-cell"><div class="label">需求节奏</div><div class="value">${escapeHtml(formatDemand(card.demand_by_month))}</div></div>
+      <div class="brief-cell full"><div class="label">AI判断</div><div class="value emphasis">${escapeHtml(card.ai_summary || '—')}</div></div>
+      <div class="brief-cell full"><div class="label">建议动作</div><div class="value">${escapeHtml(card.recommended_action || '—')}</div></div>
+    </div>
   `;
 }
 
-function renderResults(result) {
-  renderOverview(result);
-  renderPlannedItems(result.planned_items || []);
-  resultCards.innerHTML = (result.result_cards || []).map((card) => `
-    <article class="result-card">
-      <div class="result-head">
-        <div>
-          <div class="result-title">#${escapeHtml(String(card.item_index || ''))} · ${escapeHtml(card.theme || '未命名主题')}</div>
-          <div class="result-meta">${escapeHtml(card.brief_summary || '')}</div>
-          <div class="chips">
-            <span class="chip">价格带 ${escapeHtml(card.price_band_raw || '—')}</span>
-            <span class="chip">面料 ${escapeHtml((card.fabrics || []).join(' / ') || '—')}</span>
-            <span class="chip">元素 ${escapeHtml((card.elements || []).join(' / ') || '—')}</span>
-            <span class="chip">需求 ${escapeHtml(formatDemand(card.demand_by_month))}</span>
-          </div>
-        </div>
-        <div class="quality-badge quality-${escapeHtml(card.quality || 'empty')}">${escapeHtml(qualityLabel(card.quality))}</div>
-      </div>
-      <div class="stat-strip">
-        <div class="small-stat"><div class="label">Top Suppliers</div><div class="value">${escapeHtml(String(card.top_count || 0))}</div></div>
-        <div class="small-stat"><div class="label">A 类</div><div class="value">${escapeHtml(String(card.a_count || 0))}</div></div>
-        <div class="small-stat"><div class="label">B 类</div><div class="value">${escapeHtml(String(card.b_count || 0))}</div></div>
-        <div class="small-stat"><div class="label">C 类</div><div class="value">${escapeHtml(String(card.c_count || 0))}</div></div>
-        <div class="small-stat"><div class="label">建议动作</div><div class="value" style="font-size:18px">${escapeHtml(card.recommended_action || '—')}</div></div>
-      </div>
-      ${(card.supplier_cards || []).length ? `<div class="supplier-grid">${card.supplier_cards.map(renderSupplierCard).join('')}</div>` : '<div class="muted">当前没有可展示的商家卡片；如果这是二轮后仍为空的 item，建议直接补其他渠道。</div>'}
-    </article>
+function getTierLabel(tier) {
+  if (tier === 'A') return 'A类｜优先推进';
+  if (tier === 'B') return 'B类｜重点复核';
+  return 'C类｜补充储备';
+}
+
+function renderTierSection(card) {
+  const groups = card.supplier_groups || {};
+  const counts = { A: card.a_count || 0, B: card.b_count || 0, C: card.c_count || 0 };
+  const tiers = ['A', 'B', 'C'];
+  if (!groups[activeTier] || !groups[activeTier].length) {
+    const fallbackTier = tiers.find((tier) => groups[tier] && groups[tier].length);
+    activeTier = fallbackTier || 'A';
+    activeSupplierIndex = 0;
+  }
+
+  tierTabs.innerHTML = tiers.map((tier) => `
+    <button class="tier-tab ${activeTier === tier ? 'active' : ''}" data-tier="${tier}">
+      <span>${getTierLabel(tier)}</span>
+      <strong>${counts[tier] || 0}</strong>
+    </button>
   `).join('');
+
+  tierTabs.querySelectorAll('[data-tier]').forEach((el) => {
+    el.addEventListener('click', () => {
+      activeTier = el.getAttribute('data-tier');
+      activeSupplierIndex = 0;
+      renderDeck();
+    });
+  });
+
+  const supplierCards = groups[activeTier] || [];
+  supplierGrid.innerHTML = supplierCards.length ? supplierCards.map((supplier, index) => `
+    <article class="supplier-card ${index === activeSupplierIndex ? 'active' : ''}" data-supplier-index="${index}">
+      ${supplier.product_image ? `<img class="supplier-image" src="${supplier.product_image}" alt="">` : '<div class="supplier-image"></div>'}
+      <div class="supplier-body">
+        <div class="supplier-head-row">
+          <div class="supplier-name">${escapeHtml(supplier.supplier_name || '未命名商家')}</div>
+          <div class="score-badge">${escapeHtml(String(supplier.score_total || '—'))}分</div>
+        </div>
+        <div class="supplier-judgement">${escapeHtml(supplier.ai_judgement || '—')}</div>
+        <div class="chips compact">
+          <span class="chip">${escapeHtml(activeTier)}类</span>
+          <span class="chip">价格 ${escapeHtml(supplier.price_fit_guess || '—')}</span>
+        </div>
+        <div class="reason-block">
+          <div class="reason-title">推荐理由</div>
+          <ul class="reasons-list">${(supplier.recommend_reasons || []).slice(0,3).map((x) => `<li>${escapeHtml(x)}</li>`).join('') || '<li>暂无</li>'}</ul>
+        </div>
+        <div class="risk-block">
+          <div class="reason-title">风险提示</div>
+          <div class="risk-text">${escapeHtml((supplier.risk_warnings || []).join('；') || '暂无明显风险')}</div>
+        </div>
+      </div>
+    </article>
+  `).join('') : '<div class="empty-state">当前分层下暂无供应商推荐。</div>';
+
+  supplierGrid.querySelectorAll('[data-supplier-index]').forEach((el) => {
+    el.addEventListener('click', () => {
+      activeSupplierIndex = Number(el.getAttribute('data-supplier-index'));
+      renderInsight(card);
+      renderDeckSelection();
+    });
+  });
+
+  renderInsight(card);
+}
+
+function renderDeckSelection() {
+  supplierGrid.querySelectorAll('[data-supplier-index]').forEach((el) => {
+    el.classList.toggle('active', Number(el.getAttribute('data-supplier-index')) === activeSupplierIndex);
+  });
+}
+
+function renderRadar(radar) {
+  const entries = Object.entries(radar || {});
+  if (!entries.length) return '';
+  const size = 240;
+  const center = size / 2;
+  const radius = 76;
+  const levels = 4;
+  const angleStep = (Math.PI * 2) / entries.length;
+
+  const polygons = [];
+  for (let level = 1; level <= levels; level++) {
+    const r = radius * (level / levels);
+    const pts = entries.map((_, i) => {
+      const angle = -Math.PI / 2 + i * angleStep;
+      return `${(center + Math.cos(angle) * r).toFixed(1)},${(center + Math.sin(angle) * r).toFixed(1)}`;
+    }).join(' ');
+    polygons.push(`<polygon points="${pts}" class="radar-grid-level"></polygon>`);
+  }
+
+  const axes = entries.map((_, i) => {
+    const angle = -Math.PI / 2 + i * angleStep;
+    const x = center + Math.cos(angle) * radius;
+    const y = center + Math.sin(angle) * radius;
+    return `<line x1="${center}" y1="${center}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" class="radar-axis"></line>`;
+  }).join('');
+
+  const valuePts = entries.map(([_, value], i) => {
+    const angle = -Math.PI / 2 + i * angleStep;
+    const r = radius * ((value || 0) / 100);
+    return `${(center + Math.cos(angle) * r).toFixed(1)},${(center + Math.sin(angle) * r).toFixed(1)}`;
+  }).join(' ');
+
+  const labels = entries.map(([label], i) => {
+    const angle = -Math.PI / 2 + i * angleStep;
+    const r = radius + 28;
+    const x = center + Math.cos(angle) * r;
+    const y = center + Math.sin(angle) * r;
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="radar-label">${escapeHtml(label)}</text>`;
+  }).join('');
+
+  return `
+    <svg viewBox="0 0 ${size} ${size}" class="radar-svg">
+      ${polygons.join('')}
+      ${axes}
+      <polygon points="${valuePts}" class="radar-value"></polygon>
+      ${labels}
+    </svg>
+  `;
+}
+
+function renderInsight(card) {
+  const groups = card.supplier_groups || {};
+  const suppliers = groups[activeTier] || [];
+  const supplier = suppliers[activeSupplierIndex];
+  if (!supplier) {
+    insightPanel.innerHTML = '<div class="muted">当前分层下暂无供应商，切换其他层级查看。</div>';
+    return;
+  }
+
+  insightPanel.innerHTML = `
+    <div class="insight-head">
+      <div class="supplier-name">${escapeHtml(supplier.supplier_name || '未命名商家')}</div>
+      <div class="score-badge large">${escapeHtml(String(supplier.score_total || '—'))}分</div>
+    </div>
+    <div class="muted">${escapeHtml(supplier.profile_summary || supplier.supplier_profile_summary || '')}</div>
+    <div class="radar-wrap">${renderRadar(supplier.radar)}</div>
+    <div class="insight-summary">
+      <div class="reason-title">AI判断</div>
+      <div class="insight-judgement">${escapeHtml(supplier.ai_judgement || '—')}</div>
+    </div>
+    <div class="insight-summary">
+      <div class="reason-title">风险提示</div>
+      <div class="risk-text">${escapeHtml((supplier.risk_warnings || []).join('；') || '暂无明显风险')}</div>
+    </div>
+    <div class="supplier-links insight-links">
+      ${supplier.source_url ? `<a href="${supplier.source_url}" target="_blank" rel="noreferrer">查看商品</a>` : ''}
+      ${supplier.shop_url ? `<a href="${supplier.shop_url}" target="_blank" rel="noreferrer">查看店铺</a>` : ''}
+    </div>
+  `;
+}
+
+function renderDeck() {
+  if (!currentResult) return;
+  const cards = currentResult.result_cards || [];
+  if (!cards.length) return;
+  if (activePlanIndex >= cards.length) activePlanIndex = 0;
+  const card = cards[activePlanIndex];
+  renderPlanList(cards);
+  renderBriefCard(card);
+  renderTierSection(card);
+}
+
+function renderResults(result) {
+  currentResult = result;
+  activePlanIndex = 0;
+  activeTier = 'A';
+  activeSupplierIndex = 0;
+  renderOverview(result);
+  renderDeck();
   summaryMarkdown.textContent = result.summary_markdown || '暂无 markdown 汇总';
 }
 
