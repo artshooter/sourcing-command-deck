@@ -1,5 +1,8 @@
 __pycache__/
 *.pyc
 .DS_Store
-apps/sourcing-web/runs/
-apps/sourcing-web/uploads/
+apps/runs/
+apps/uploads/
+apps/secrets/
+apps/1688-cookie.txt
+.env

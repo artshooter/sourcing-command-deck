@@ -1,0 +1,61 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/artshooter/sourcing-command-deck:latest
+
+      - name: Sync docker-compose.yml
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "docker-compose.yml"
+          target: "~/sourcing-command-deck/"
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            mkdir -p ~/sourcing-command-deck
+            cd ~/sourcing-command-deck
+            cat > .env << 'ENVEOF'
+            LLM_API_KEY=${{ secrets.LLM_API_KEY }}
+            LLM_API_BASE=${{ secrets.LLM_API_BASE }}
+            LLM_MODEL=${{ secrets.LLM_MODEL }}
+            VISION_API_KEY=${{ secrets.VISION_API_KEY }}
+            ENVEOF
+            chmod 600 .env
+            docker compose pull
+            docker compose up -d --remove-orphans
+          script_stop: true

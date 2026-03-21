@@ -16,21 +16,20 @@ from pathlib import Path
 from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs, unquote, urlparse
 
-ROOT = Path(__file__).resolve().parent
-WORKSPACE = ROOT.parents[1]
-STATIC_DIR = ROOT / 'static'
-UPLOADS_DIR = ROOT / 'uploads'
-RUNS_DIR = ROOT / 'runs'
-DEFAULT_COOKIE = WORKSPACE / 'secrets' / '1688-cookie.txt'
-PARSE_SCRIPT = WORKSPACE / 'skills' / 'planning-brief-parser' / 'scripts' / 'parse_planning_xlsx.py'
-AUTO_BATCH_SCRIPT = WORKSPACE / 'skills' / 'supplier-scoring' / 'scripts' / 'run_auto_batch_workflow.py'
-
-for p in [UPLOADS_DIR, RUNS_DIR]:
-    p.mkdir(parents=True, exist_ok=True)
+from config import (
+    WORKSPACE, STATIC_DIR, UPLOADS_DIR, RUNS_DIR,
+    COOKIE_PATH, PARSE_SCRIPT, AUTO_BATCH_SCRIPT,
+    HOST, PORT, ENABLE_LLM, LLM_API_KEY,
+)
 
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+JOBS_FILE = RUNS_DIR / '_jobs.json'
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def now_ts():
     return int(time.time())
@@ -53,7 +52,7 @@ def read_text(path, default=''):
 
 
 def write_json(path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     with io.open(str(path), 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -65,12 +64,39 @@ def sanitize_filename(name):
     return name.replace('/', '_').replace('\\', '_')
 
 
+# ---------------------------------------------------------------------------
+# Job persistence
+# ---------------------------------------------------------------------------
+
+def _persist_jobs_locked():
+    """Write JOBS to disk atomically. Must be called with JOBS_LOCK held."""
+    try:
+        snapshot = {}
+        for jid, job in JOBS.items():
+            slim = {k: v for k, v in job.items() if k not in ('result', 'auto_summary', 'raw_stdout', 'raw_stderr')}
+            snapshot[jid] = slim
+        tmp_path = str(JOBS_FILE) + '.tmp'
+        with io.open(tmp_path, 'w', encoding='utf-8') as f:
+            json.dump(snapshot, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, str(JOBS_FILE))
+    except Exception:
+        pass
+
+
+def _load_persisted_jobs():
+    global JOBS
+    data = read_json(JOBS_FILE, {})
+    if isinstance(data, dict):
+        JOBS = data
+
+
 def update_job(job_id, **kwargs):
     with JOBS_LOCK:
         job = JOBS.get(job_id, {})
         job.update(kwargs)
         job['updated_at'] = now_ts()
         JOBS[job_id] = job
+        _persist_jobs_locked()
     return job
 
 
@@ -79,9 +105,20 @@ def load_job(job_id):
         return JOBS.get(job_id)
 
 
-def summarize_suppliers(top_suppliers):
+# ---------------------------------------------------------------------------
+# Dashboard builder
+# ---------------------------------------------------------------------------
+
+def summarize_suppliers(top_suppliers, llm_report=None, item_index=None):
     level_counts = {'A': 0, 'B': 0, 'C': 0, 'other': 0}
     grouped_cards = {'A': [], 'B': [], 'C': [], 'other': []}
+
+    # Pre-build LLM judgement lookup
+    llm_judgements = {}
+    if llm_report and item_index:
+        for j in llm_report.get('supplier_judgements', {}).get(item_index, []):
+            llm_judgements[j.get('supplier_name', '')] = j.get('ai_judgement', '')
+
     for row in top_suppliers or []:
         level = row.get('recommendation_level') or 'other'
         if level not in level_counts:
@@ -98,14 +135,21 @@ def summarize_suppliers(top_suppliers):
             '风险可控度': max(5, min(100, 100 - int(risk_penalty / 15.0 * 100))),
         }
 
-        ai_judgement = '可作为补充储备，建议先保留观察'
-        if level == 'A':
-            ai_judgement = '风格与价格带匹配度较高，建议优先推进'
-        elif level == 'B':
-            ai_judgement = '已有一定匹配度，建议重点复核后推进'
+        # AI judgement: prefer LLM-generated, then per-row LLM, then rule-based default
+        supplier_name = row.get('supplier_name', '')
+        ai_judgement = llm_judgements.get(supplier_name) or row.get('llm_ai_judgement', '')
+        if not ai_judgement:
+            ai_judgement = '可作为补充储备，建议先保留观察'
+            if level == 'A':
+                ai_judgement = '风格与价格带匹配度较高，建议优先推进'
+            elif level == 'B':
+                ai_judgement = '已有一定匹配度，建议重点复核后推进'
+
+        # Profile summary: prefer LLM-generated
+        profile_summary = row.get('llm_profile_summary') or row.get('supplier_profile_summary', '')
 
         grouped_cards[level].append({
-            'supplier_name': row.get('supplier_name', ''),
+            'supplier_name': supplier_name,
             'product_title': row.get('product_title', ''),
             'product_image': row.get('product_image', ''),
             'price_fit_guess': row.get('price_fit_guess', ''),
@@ -115,16 +159,20 @@ def summarize_suppliers(top_suppliers):
             'risk_warnings': row.get('risk_warnings', [])[:3],
             'source_url': row.get('source_url', ''),
             'shop_url': row.get('shop_url', ''),
-            'supplier_profile_summary': row.get('supplier_profile_summary', ''),
+            'supplier_profile_summary': profile_summary,
             'ai_judgement': ai_judgement,
             'profile_summary': row.get('profile_summary', ''),
             'radar': radar,
             'score_breakdown': score_breakdown,
+            'style_fit_guess': row.get('style_fit_guess', ''),
+            'style_fit_reason': row.get('style_fit_reason', ''),
+            'market_fit_guess': row.get('market_fit_guess', ''),
+            'market_fit_reason': row.get('market_fit_reason', ''),
         })
     return level_counts, grouped_cards
 
 
-def build_dashboard(job_dir, auto_summary):
+def build_dashboard(job_dir, auto_summary, llm_report=None):
     planning_brief = read_json(job_dir / 'planning-brief.json', {}) or {}
     batch_summary_path = auto_summary.get('batch_summary_json', '')
     batch_summary = read_json(Path(batch_summary_path), {}) if batch_summary_path else {}
@@ -133,6 +181,11 @@ def build_dashboard(job_dir, auto_summary):
     planned_lookup = {}
     for item in planning_brief.get('items', []):
         planned_lookup[item.get('item_index')] = item
+
+    # LLM item summaries lookup
+    llm_item_summaries = {}
+    if llm_report:
+        llm_item_summaries = llm_report.get('item_summaries', {})
 
     result_cards = []
     total_a = total_b = total_c = total_other = 0
@@ -146,7 +199,7 @@ def build_dashboard(job_dir, auto_summary):
         top_json = result.get('top_json')
         top_data = read_json(Path(top_json), {}) if top_json else {}
         top_suppliers = top_data.get('top_suppliers', []) or []
-        level_counts, supplier_groups = summarize_suppliers(top_suppliers)
+        level_counts, supplier_groups = summarize_suppliers(top_suppliers, llm_report, item_index)
         total_a += level_counts['A']
         total_b += level_counts['B']
         total_c += level_counts['C']
@@ -168,14 +221,25 @@ def build_dashboard(job_dir, auto_summary):
             quality = 'empty'
             empty_count += 1
 
-        recommended_action = '建议继续观察'
-        if quality == 'strong':
-            recommended_action = '优先推进A类供应商'
-        elif quality == 'weak':
-            recommended_action = '重点复核后推进'
-        elif quality == 'empty' and second_pass_used:
-            recommended_action = '建议补其他渠道'
+        # Use LLM summaries if available, otherwise rule-based defaults
+        llm_item = llm_item_summaries.get(item_index, {}) or llm_item_summaries.get(str(item_index), {})
+
+        recommended_action = llm_item.get('recommended_action', '')
+        if not recommended_action:
+            recommended_action = '建议继续观察'
+            if quality == 'strong':
+                recommended_action = '优先推进A类供应商'
+            elif quality == 'weak':
+                recommended_action = '重点复核后推进'
+            elif quality == 'empty' and second_pass_used:
+                recommended_action = '建议补其他渠道'
+
+        if quality == 'empty' and second_pass_used:
             fallback_count += 1
+
+        ai_summary = llm_item.get('ai_summary', '')
+        if not ai_summary:
+            ai_summary = '当前匹配度较高，建议优先推进' if quality == 'strong' else ('已有可跟进候选，建议重点复核' if quality == 'weak' else '当前渠道结果偏弱，建议补其他渠道')
 
         result_cards.append({
             'item_index': item_index,
@@ -192,7 +256,7 @@ def build_dashboard(job_dir, auto_summary):
             'second_pass_used': second_pass_used,
             'second_pass_still_empty': bool(second_pass and not second_pass.get('top_count')),
             'recommended_action': recommended_action,
-            'ai_summary': '当前匹配度较高，建议优先推进' if quality == 'strong' else ('已有可跟进候选，建议重点复核' if quality == 'weak' else '当前渠道结果偏弱，建议补其他渠道'),
+            'ai_summary': ai_summary,
             'a_count': level_counts['A'],
             'b_count': level_counts['B'],
             'c_count': level_counts['C'],
@@ -202,7 +266,16 @@ def build_dashboard(job_dir, auto_summary):
 
     total_items = len(planning_brief.get('items', []))
     selected_count = len(planned_items)
-    summary_md = read_text(Path(auto_summary.get('batch_summary_v2_md', ''))) if auto_summary.get('batch_summary_v2_md') else ''
+
+    # Summary markdown: prefer LLM-generated batch summary
+    summary_md = ''
+    if llm_report and llm_report.get('batch_markdown'):
+        summary_md = llm_report['batch_markdown']
+    if not summary_md:
+        summary_md = read_text(Path(auto_summary.get('batch_summary_v2_md', ''))) if auto_summary.get('batch_summary_v2_md') else ''
+
+    # Parse validation
+    parse_validation = read_json(job_dir / 'parse-validation.json')
 
     dashboard = {
         'job_id': job_dir.name,
@@ -228,10 +301,15 @@ def build_dashboard(job_dir, auto_summary):
         'result_cards': result_cards,
         'summary_markdown': summary_md,
         'planning_brief': planning_brief,
+        'parse_validation': parse_validation,
     }
     write_json(job_dir / 'dashboard.json', dashboard)
     return dashboard
 
+
+# ---------------------------------------------------------------------------
+# Job runner
+# ---------------------------------------------------------------------------
 
 def run_job(job_id):
     job = load_job(job_id)
@@ -247,6 +325,7 @@ def run_job(job_id):
     env['PYTHONIOENCODING'] = 'utf-8'
 
     try:
+        # --- Stage 1: Parse ---
         update_job(job_id, status='validating', stage='校验企划文件', progress=10)
         parse_proc = subprocess.run(
             [sys.executable, str(PARSE_SCRIPT), str(xlsx_path), '--pretty'],
@@ -263,6 +342,24 @@ def run_job(job_id):
         if item_count <= 0:
             raise RuntimeError('模板识别失败：没有解析出任何企划 item，请确认使用固定企划模板。')
         write_json(job_dir / 'planning-brief.json', brief)
+
+        # --- Stage 1.5: LLM validation (non-blocking) ---
+        validation_result = None
+        try:
+            from llm_interventions import validate_parsed_brief
+            update_job(job_id, stage='AI 校验解析结果', progress=15)
+            validation_result = validate_parsed_brief(job_dir)
+        except Exception:
+            traceback.print_exc()
+
+        # --- Stage 1.6: Image analysis (non-blocking) ---
+        try:
+            from llm_interventions import analyze_brief_images
+            update_job(job_id, stage='AI 分析企划参考图片', progress=20)
+            analyze_brief_images(job_dir)
+        except Exception:
+            traceback.print_exc()
+
         preview = {
             'item_count': item_count,
             'preview_items': [
@@ -272,10 +369,12 @@ def run_job(job_id):
                     'brief_summary': x.get('brief_summary', '')
                 }
                 for x in brief.get('items', [])[:5]
-            ]
+            ],
+            'validation': validation_result,
         }
         update_job(job_id, status='running', stage='企划解析完成，开始寻源', progress=25, preview=preview)
 
+        # --- Stage 2: Batch workflow ---
         cmd = [
             sys.executable, str(AUTO_BATCH_SCRIPT),
             '--xlsx', str(xlsx_path),
@@ -305,8 +404,22 @@ def run_job(job_id):
             raise RuntimeError('Failed to load workflow summary: {}'.format(out_path))
         shutil.copyfile(str(Path(out_path)), str(job_dir / 'auto-batch-summary.json'))
 
-        update_job(job_id, stage='正在生成视觉化结果页', progress=88)
-        dashboard = build_dashboard(job_dir, auto_summary)
+        # --- Stage 3: LLM enrichment (non-blocking) ---
+        llm_report = None
+        try:
+            from llm_interventions import enrich_with_llm
+            update_job(job_id, stage='AI 分析供应商数据', progress=75)
+
+            def _progress_cb(stage_text):
+                update_job(job_id, stage=stage_text)
+
+            llm_report = enrich_with_llm(job_dir, auto_summary, progress_callback=_progress_cb)
+        except Exception:
+            traceback.print_exc()
+
+        # --- Stage 4: Build dashboard ---
+        update_job(job_id, stage='正在生成视觉化结果页', progress=90)
+        dashboard = build_dashboard(job_dir, auto_summary, llm_report=llm_report)
         update_job(
             job_id,
             status='done',
@@ -322,18 +435,26 @@ def run_job(job_id):
         update_job(job_id, status='error', stage='执行失败', progress=100, error=err)
 
 
+# ---------------------------------------------------------------------------
+# HTTP Server
+# ---------------------------------------------------------------------------
+
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 
 class AppHandler(BaseHTTPRequestHandler):
-    server_version = 'SourcingWeb/0.1'
+    server_version = 'SourcingWeb/0.2'
+
+    def log_message(self, format, *args):
+        sys.stderr.write('[%s] %s\n' % (time.strftime('%H:%M:%S'), format % args))
 
     def _send_json(self, data, status=200):
         payload = json.dumps(data, ensure_ascii=False).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(payload)))
+        self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(payload)
 
@@ -344,6 +465,10 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
+
+    def _read_body(self):
+        length = int(self.headers.get('Content-Length', 0))
+        return self.rfile.read(length) if length > 0 else b''
 
     def _serve_static(self, path):
         target = (STATIC_DIR / path.lstrip('/')).resolve()
@@ -359,6 +484,8 @@ class AppHandler(BaseHTTPRequestHandler):
             '.png': 'image/png',
             '.jpg': 'image/jpeg',
             '.jpeg': 'image/jpeg',
+            '.webp': 'image/webp',
+            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         }.get(suffix, 'application/octet-stream')
         data = target.read_bytes()
         self.send_response(200)
@@ -367,12 +494,39 @@ class AppHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
 
         if path == '/api/health':
-            return self._send_json({'ok': True, 'cookie_exists': DEFAULT_COOKIE.exists()})
+            llm_healthy = False
+            try:
+                from llm_client import is_healthy
+                llm_healthy = ENABLE_LLM and bool(LLM_API_KEY) and is_healthy()
+            except Exception:
+                pass
+            return self._send_json({
+                'ok': True,
+                'cookie_exists': COOKIE_PATH.exists(),
+                'llm_enabled': ENABLE_LLM,
+                'llm_healthy': llm_healthy,
+            })
+
+        if path == '/api/cookie/status':
+            exists = COOKIE_PATH.exists()
+            info = {'exists': exists, 'updated_at': None, 'length': 0}
+            if exists:
+                stat = COOKIE_PATH.stat()
+                info['updated_at'] = int(stat.st_mtime)
+                info['length'] = stat.st_size
+            return self._send_json(info)
 
         if path == '/api/template-spec':
             return self._send_json({
@@ -381,9 +535,22 @@ class AppHandler(BaseHTTPRequestHandler):
                     '请上传固定企划模板（Excel .xlsx）',
                     '系统会先校验是否能解析出 item/theme/price/fabrics/elements',
                     '如果没有解析出任何 item，会直接提示模板不符合要求',
-                    '默认使用 workspace/secrets/1688-cookie.txt 作为 1688 cookie 文件'
                 ]
             })
+
+        if path == '/api/jobs':
+            jobs_list = []
+            with JOBS_LOCK:
+                for jid, job in sorted(JOBS.items(), key=lambda x: x[1].get('created_at', 0), reverse=True):
+                    jobs_list.append({
+                        'job_id': jid,
+                        'status': job.get('status', ''),
+                        'stage': job.get('stage', ''),
+                        'progress': job.get('progress', 0),
+                        'created_at': job.get('created_at'),
+                        'original_filename': job.get('original_filename', ''),
+                    })
+            return self._send_json({'jobs': jobs_list[:50]})
 
         if path.startswith('/api/jobs/'):
             job_id = path.split('/')[-1]
@@ -403,6 +570,20 @@ class AppHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        if path == '/api/cookie':
+            try:
+                body = self._read_body()
+                data = json.loads(body.decode('utf-8'))
+                cookie_str = (data.get('cookie') or '').strip()
+                if not cookie_str:
+                    return self._send_json({'error': 'cookie 不能为空'}, 400)
+                COOKIE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                with io.open(str(COOKIE_PATH), 'w', encoding='utf-8') as f:
+                    f.write(cookie_str)
+                return self._send_json({'ok': True, 'length': len(cookie_str)})
+            except Exception as e:
+                return self._send_json({'error': str(e)}, 400)
+
         if path == '/api/jobs':
             form = cgi.FieldStorage(
                 fp=self.rfile,
@@ -419,21 +600,33 @@ class AppHandler(BaseHTTPRequestHandler):
             if not filename.lower().endswith('.xlsx'):
                 return self._send_json({'error': '只支持 .xlsx 文件'}, 400)
 
+            # Cookie: prefer form-submitted value, fallback to server file
+            cookie_value = (form.getfirst('cookie_value', '') or '').strip()
             job_id = time.strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:8]
             job_dir = RUNS_DIR / job_id
             job_dir.mkdir(parents=True, exist_ok=True)
+
+            if cookie_value:
+                cookie_file = job_dir / 'cookie.txt'
+                with io.open(str(cookie_file), 'w', encoding='utf-8') as f:
+                    f.write(cookie_value)
+                cookie_path = str(cookie_file)
+            elif COOKIE_PATH.exists():
+                cookie_path = str(COOKIE_PATH)
+            else:
+                return self._send_json({'error': '1688 Cookie 未填写，请在页面上配置 Cookie'}, 400)
+
             xlsx_path = job_dir / filename
             with io.open(str(xlsx_path), 'wb') as f:
                 f.write(upload.file.read())
 
-            max_items = int(form.getfirst('max_items', '5'))
-            queries = int(form.getfirst('queries', '2'))
-            pages = int(form.getfirst('pages', '1'))
-            top_k = int(form.getfirst('top_k', '10'))
-            cookie_path = form.getfirst('cookie_path', str(DEFAULT_COOKIE)).strip() or str(DEFAULT_COOKIE)
-
-            if not Path(cookie_path).exists():
-                return self._send_json({'error': 'cookie 文件不存在: {}'.format(cookie_path)}, 400)
+            try:
+                max_items = max(1, min(20, int(form.getfirst('max_items', '5'))))
+                queries = max(1, min(5, int(form.getfirst('queries', '2'))))
+                pages = max(1, min(3, int(form.getfirst('pages', '1'))))
+                top_k = max(1, min(20, int(form.getfirst('top_k', '10'))))
+            except (ValueError, TypeError):
+                return self._send_json({'error': '参数格式错误'}, 400)
 
             meta = {
                 'job_id': job_id,
@@ -448,7 +641,6 @@ class AppHandler(BaseHTTPRequestHandler):
             }
             write_json(job_dir / 'meta.json', meta)
             job = {
-                'job_id': job_id,
                 'status': 'queued',
                 'stage': '已接收文件，等待启动',
                 'progress': 0,
@@ -473,10 +665,11 @@ class AppHandler(BaseHTTPRequestHandler):
 
 
 def main():
-    host = os.environ.get('SOURCING_WEB_HOST', '127.0.0.1')
-    port = int(os.environ.get('SOURCING_WEB_PORT', '8765'))
-    httpd = ThreadingHTTPServer((host, port), AppHandler)
-    print('Sourcing web app running at http://{}:{}/'.format(host, port))
+    _load_persisted_jobs()
+    httpd = ThreadingHTTPServer((HOST, PORT), AppHandler)
+    print('Sourcing web app running at http://{}:{}/'.format(HOST, PORT))
+    print('LLM enabled: {}'.format(ENABLE_LLM))
+    print('Cookie path: {}'.format(COOKIE_PATH))
     httpd.serve_forever()
 
 

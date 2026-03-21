@@ -1,0 +1,28 @@
+services:
+  sourcing:
+    image: ghcr.io/artshooter/sourcing-command-deck:latest
+    restart: unless-stopped
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_API_BASE=${LLM_API_BASE:-https://api.edgefn.net/v1}
+      - LLM_MODEL=${LLM_MODEL:-MiniMax-M2.5}
+      - VISION_API_KEY=${VISION_API_KEY}
+      - SOURCING_WEB_HOST=0.0.0.0
+      - SOURCING_WEB_PORT=8765
+    volumes:
+      - sourcing-runs:/app/runs
+      - sourcing-secrets:/app/secrets
+    networks:
+      - traefik-net
+    labels:
+      - traefik.enable=true
+      - 'traefik.http.routers.sourcing.rule=Host(`sourcing.ashooter.com`)'
+      - traefik.http.services.sourcing.loadbalancer.server.port=8765
+
+volumes:
+  sourcing-runs:
+  sourcing-secrets:
+
+networks:
+  traefik-net:
+    external: true

@@ -864,3 +864,18 @@ input[type="number"]:focus, input[type="text"]:focus {
   .mission-panel { padding: 14px; }
   .supplier-grid { grid-template-columns: 1fr; }
 }
+
+/* Cookie status & modal */
+.cookie-status { margin: 8px 0; font-size: 13px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cookie-ok { color: #4ade80; }
+.cookie-ok::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 4px; }
+.cookie-missing { color: #f87171; }
+.cookie-missing::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #f87171; margin-right: 4px; }
+.cookie-date { color: rgba(255,255,255,0.4); font-size: 12px; }
+.cookie-edit-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.7); padding: 2px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.cookie-edit-btn:hover { background: rgba(255,255,255,0.14); color: #fff; }
+
+.modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.modal.hidden { display: none; }
+.modal-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+.modal-content { position: relative; width: 90%; max-width: 520px; padding: 20px; }

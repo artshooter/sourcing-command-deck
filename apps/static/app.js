@@ -368,6 +368,93 @@ document.querySelectorAll('.scroll-container').forEach((el) => {
   });
 });
 
+// --- Cookie management ---
+const cookieStatus = document.getElementById('cookieStatus');
+const cookieModal = document.getElementById('cookieModal');
+const cookieInput = document.getElementById('cookieInput');
+const cookieSaveBtn = document.getElementById('cookieSaveBtn');
+const cookieCancelBtn = document.getElementById('cookieCancelBtn');
+
+async function checkCookieStatus() {
+  try {
+    const res = await fetch('/api/cookie/status');
+    const data = await res.json();
+    if (data.exists) {
+      const date = data.updated_at ? new Date(data.updated_at * 1000).toLocaleString('zh-CN') : '';
+      cookieStatus.innerHTML = `<span class="cookie-ok">1688 Cookie 已配置</span> <span class="cookie-date">${date}</span> <button class="cookie-edit-btn" type="button">更新</button>`;
+    } else {
+      // Server has no cookie — try to restore from localStorage
+      const saved = localStorage.getItem('1688_cookie');
+      if (saved) {
+        await syncCookieToServer(saved);
+        return;
+      }
+      cookieStatus.innerHTML = `<span class="cookie-missing">1688 Cookie 未配置</span> <button class="cookie-edit-btn" type="button">配置 Cookie</button>`;
+    }
+    cookieStatus.querySelector('.cookie-edit-btn').addEventListener('click', (e) => {
+      e.preventDefault();
+      // Pre-fill from localStorage
+      const saved = localStorage.getItem('1688_cookie');
+      if (saved) cookieInput.value = saved;
+      cookieModal.classList.remove('hidden');
+    });
+  } catch (e) {
+    cookieStatus.innerHTML = '<span class="cookie-missing">无法检查 Cookie 状态</span>';
+  }
+}
+
+async function syncCookieToServer(cookieStr) {
+  try {
+    const res = await fetch('/api/cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cookie: cookieStr }),
+    });
+    if (res.ok) {
+      checkCookieStatus();
+    }
+  } catch (e) {
+    // silent
+  }
+}
+
+cookieSaveBtn.addEventListener('click', async () => {
+  const val = cookieInput.value.trim();
+  if (!val) return;
+  cookieSaveBtn.disabled = true;
+  cookieSaveBtn.textContent = '保存中...';
+  try {
+    const res = await fetch('/api/cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cookie: val }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      localStorage.setItem('1688_cookie', val);
+      cookieModal.classList.add('hidden');
+      checkCookieStatus();
+    } else {
+      alert(data.error || '保存失败');
+    }
+  } catch (e) {
+    alert('网络错误');
+  }
+  cookieSaveBtn.disabled = false;
+  cookieSaveBtn.textContent = '保存';
+});
+
+cookieCancelBtn.addEventListener('click', () => {
+  cookieModal.classList.add('hidden');
+});
+
+document.querySelector('.modal-overlay')?.addEventListener('click', () => {
+  cookieModal.classList.add('hidden');
+});
+
+checkCookieStatus();
+
+// --- Form submit ---
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   submitBtn.disabled = true;
@@ -377,6 +464,11 @@ form.addEventListener('submit', async (e) => {
   renderPreview(null);
 
   const formData = new FormData(form);
+  // Attach cookie from localStorage to each job
+  const savedCookie = localStorage.getItem('1688_cookie') || '';
+  if (savedCookie) {
+    formData.set('cookie_value', savedCookie);
+  }
   const res = await fetch('/api/jobs', { method: 'POST', body: formData });
   const data = await res.json();
   if (!res.ok) {
