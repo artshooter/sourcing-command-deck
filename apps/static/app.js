@@ -15,13 +15,22 @@ const tierTabs = document.getElementById('tierTabs');
 const supplierGrid = document.getElementById('supplierGrid');
 const insightPanel = document.getElementById('insightPanel');
 const summaryMarkdown = document.getElementById('summaryMarkdown');
+const homeSection = document.getElementById('homeSection');
+const backBtn = document.getElementById('backBtn');
+const sidebarStats = document.getElementById('sidebarStats');
+const supplierNav = document.getElementById('supplierNav');
+const supplierNavInfo = document.getElementById('supplierNavInfo');
+const supplierPrev = document.getElementById('supplierPrev');
+const supplierNext = document.getElementById('supplierNext');
 
 const RING_LENGTH = 301.59;
+const SUPPLIERS_PER_PAGE = 6;
 let pollTimer = null;
 let currentResult = null;
 let activePlanIndex = 0;
 let activeTier = 'A';
 let activeSupplierIndex = 0;
+let supplierPage = 0;
 
 function setProgress(value) {
   const v = Math.max(0, Math.min(100, Number(value || 0)));
@@ -80,16 +89,12 @@ function renderPlanList(cards) {
     <article class="planned-item ${index === activePlanIndex ? 'active' : ''}" data-plan-index="${index}">
       <div class="planned-top">
         <div class="theme">${escapeHtml(card.theme || '未命名企划款')}</div>
-        <div class="quality-badge quality-${escapeHtml(card.quality || 'empty')}">${escapeHtml(qualityLabel(card.quality))}</div>
       </div>
       <div class="muted small-gap">${escapeHtml(card.price_band_raw || '价格带待定')}</div>
+      <div class="reasons">风格：${escapeHtml((card.styles || []).join(' / ') || '—')}</div>
+      <div class="reasons">颜色：${escapeHtml((card.colors || []).join(' / ') || '—')}</div>
       <div class="reasons">面料：${escapeHtml((card.fabrics || []).join(' / ') || '—')}</div>
       <div class="reasons">元素：${escapeHtml((card.elements || []).join(' / ') || '—')}</div>
-      <div class="plan-bottom">
-        <span class="mini-stat">A类 ${escapeHtml(String(card.a_count || 0))}</span>
-        <span class="mini-stat">B类 ${escapeHtml(String(card.b_count || 0))}</span>
-        <span class="mini-stat">C类 ${escapeHtml(String(card.c_count || 0))}</span>
-      </div>
     </article>
   `).join('');
 
@@ -98,6 +103,7 @@ function renderPlanList(cards) {
       activePlanIndex = Number(el.getAttribute('data-plan-index'));
       activeTier = 'A';
       activeSupplierIndex = 0;
+      supplierPage = 0;
       renderDeck();
     });
   });
@@ -151,24 +157,29 @@ function renderTierSection(card) {
     el.addEventListener('click', () => {
       activeTier = el.getAttribute('data-tier');
       activeSupplierIndex = 0;
+      supplierPage = 0;
       renderDeck();
     });
   });
 
-  const supplierCards = groups[activeTier] || [];
-  supplierGrid.innerHTML = supplierCards.length ? supplierCards.map((supplier, index) => `
-    <article class="supplier-card ${index === activeSupplierIndex ? 'active' : ''}" data-supplier-index="${index}">
-      ${supplier.product_image ? `<img class="supplier-image" src="${supplier.product_image}" alt="">` : '<div class="supplier-image"></div>'}
+  const allSuppliers = groups[activeTier] || [];
+  const totalPages = Math.max(1, Math.ceil(allSuppliers.length / SUPPLIERS_PER_PAGE));
+  if (supplierPage >= totalPages) supplierPage = totalPages - 1;
+  const pageStart = supplierPage * SUPPLIERS_PER_PAGE;
+  const pageSuppliers = allSuppliers.slice(pageStart, pageStart + SUPPLIERS_PER_PAGE);
+
+  supplierGrid.innerHTML = pageSuppliers.length ? pageSuppliers.map((supplier, index) => `
+    <article class="supplier-card" data-supplier-index="${pageStart + index}">
+      <div class="supplier-radar-wrap">${renderRadar(supplier.radar)}</div>
       <div class="supplier-body">
         <div class="supplier-head-row">
           <div class="supplier-name">${escapeHtml(supplier.supplier_name || '未命名商家')}</div>
-          <div class="score-badge">${escapeHtml(String(supplier.score_total || '—'))}分</div>
+          <div class="supplier-price-score">
+            <span class="chip">${escapeHtml(supplier.price_fit_guess || '—')}</span>
+            <div class="score-badge">${escapeHtml(String(supplier.score_total || '—'))}分</div>
+          </div>
         </div>
         <div class="supplier-judgement">${escapeHtml(supplier.ai_judgement || '—')}</div>
-        <div class="chips compact">
-          <span class="chip">${escapeHtml(activeTier)}类</span>
-          <span class="chip">价格 ${escapeHtml(supplier.price_fit_guess || '—')}</span>
-        </div>
         <div class="reason-block">
           <div class="reason-title">推荐理由</div>
           <ul class="reasons-list">${(supplier.recommend_reasons || []).slice(0,3).map((x) => `<li>${escapeHtml(x)}</li>`).join('') || '<li>暂无</li>'}</ul>
@@ -177,19 +188,21 @@ function renderTierSection(card) {
           <div class="reason-title">风险提示</div>
           <div class="risk-text">${escapeHtml((supplier.risk_warnings || []).join('；') || '暂无明显风险')}</div>
         </div>
+        <div class="supplier-links">
+          ${supplier.shop_url ? `<a href="${supplier.shop_url}" target="_blank" rel="noreferrer">查看店铺</a>` : ''}
+        </div>
       </div>
     </article>
   `).join('') : '<div class="empty-state">当前分层下暂无供应商推荐。</div>';
 
-  supplierGrid.querySelectorAll('[data-supplier-index]').forEach((el) => {
-    el.addEventListener('click', () => {
-      activeSupplierIndex = Number(el.getAttribute('data-supplier-index'));
-      renderInsight(card);
-      renderDeckSelection();
-    });
-  });
-
-  renderInsight(card);
+  if (allSuppliers.length > SUPPLIERS_PER_PAGE) {
+    supplierNav.style.display = 'flex';
+    supplierNavInfo.textContent = `${supplierPage + 1} / ${totalPages}（共${allSuppliers.length}个）`;
+    supplierPrev.disabled = supplierPage <= 0;
+    supplierNext.disabled = supplierPage >= totalPages - 1;
+  } else {
+    supplierNav.style.display = 'none';
+  }
 }
 
 function renderDeckSelection() {
@@ -201,9 +214,9 @@ function renderDeckSelection() {
 function renderRadar(radar) {
   const entries = Object.entries(radar || {});
   if (!entries.length) return '';
-  const size = 240;
+  const size = 300;
   const center = size / 2;
-  const radius = 76;
+  const radius = 85;
   const levels = 4;
   const angleStep = (Math.PI * 2) / entries.length;
 
@@ -232,7 +245,7 @@ function renderRadar(radar) {
 
   const labels = entries.map(([label], i) => {
     const angle = -Math.PI / 2 + i * angleStep;
-    const r = radius + 28;
+    const r = radius + 52;
     const x = center + Math.cos(angle) * r;
     const y = center + Math.sin(angle) * r;
     return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="radar-label">${escapeHtml(label)}</text>`;
@@ -295,7 +308,10 @@ function renderResults(result) {
   activePlanIndex = 0;
   activeTier = 'A';
   activeSupplierIndex = 0;
+  supplierPage = 0;
   renderOverview(result);
+  const ov = result.overview || {};
+  sidebarStats.innerHTML = `<span>企划款总数 <strong>${ov.total_items || 0}</strong></span><span>已寻源款数 <strong>${ov.matched_count || 0}</strong></span>`;
   renderDeck();
   summaryMarkdown.textContent = result.summary_markdown || '暂无 markdown 汇总';
 }
@@ -311,6 +327,7 @@ async function pollJob(jobId) {
   renderPreview(data.preview);
 
   if (data.status === 'done' && data.result) {
+    homeSection.classList.add('hidden');
     resultsSection.classList.remove('hidden');
     renderResults(data.result);
     submitBtn.disabled = false;
@@ -329,6 +346,27 @@ async function pollJob(jobId) {
 
   pollTimer = setTimeout(() => pollJob(jobId), 2500);
 }
+
+backBtn.addEventListener('click', () => {
+  resultsSection.classList.add('hidden');
+  homeSection.classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+supplierPrev.addEventListener('click', () => {
+  if (supplierPage > 0) { supplierPage--; renderDeck(); }
+});
+supplierNext.addEventListener('click', () => {
+  supplierPage++;
+  renderDeck();
+});
+
+document.querySelectorAll('.scroll-container').forEach((el) => {
+  el.addEventListener('scroll', () => {
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+    el.classList.toggle('at-bottom', atBottom);
+  });
+});
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();

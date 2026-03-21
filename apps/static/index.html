@@ -11,6 +11,7 @@
   <div class="grid"></div>
 
   <main class="page-shell">
+    <div id="homeSection">
     <header class="top-bar">
       <img src="/logo.webp" alt="Savana" class="brand-logo" />
     </header>
@@ -57,6 +58,10 @@
                 </svg>
                 <div class="dropzone-title">拖入企划文件，或点此选择</div>
                 <div class="dropzone-subtitle">请按照模版填写并导入企划文件(.xlsx)</div>
+                <a href="/template.xlsx" download class="template-download" onclick="event.stopPropagation()">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M8 10L5 7M8 10l3-3M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  下载企划模版
+                </a>
               </div>
             </label>
 
@@ -110,49 +115,113 @@
         </div>
       </div>
     </section>
+    </div>
 
     <section id="resultsSection" class="results-section hidden">
-      <div class="section-title-row">
-        <div>
-          <div class="eyebrow">结果作战面板</div>
-          <h2>寻源决策总览</h2>
-        </div>
-      </div>
+      <button id="backBtn" class="back-btn">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        返回首页
+      </button>
 
-      <div id="overviewCards" class="overview-grid"></div>
+      <div id="overviewCards" class="hidden"></div>
 
       <section class="deck-layout">
         <aside class="glow-card item-sidebar">
           <div class="panel-header"><span class="dot"></span><span>企划款列表</span></div>
-          <div id="plannedStrip" class="planned-strip vertical"></div>
+          <div id="sidebarStats" class="sidebar-stats"></div>
+          <div id="plannedStrip" class="planned-strip vertical scroll-container"></div>
         </aside>
 
         <section class="deck-main">
-          <div id="currentBriefCard" class="glow-card current-brief-card"></div>
+          <div id="currentBriefCard" class="hidden"></div>
 
           <div class="glow-card tier-panel">
             <div class="panel-header"><span class="dot"></span><span>供应商分层</span></div>
             <div id="tierTabs" class="tier-tabs"></div>
-            <div id="supplierGrid" class="supplier-grid"></div>
+            <div id="supplierGrid" class="supplier-grid scroll-container"></div>
+            <div id="supplierNav" class="supplier-nav" style="display:none">
+              <span id="supplierNavInfo" class="supplier-nav-info"></span>
+              <div class="supplier-nav-btns">
+                <button id="supplierPrev" class="supplier-nav-btn" title="上一页"><svg viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button id="supplierNext" class="supplier-nav-btn" title="下一页"><svg viewBox="0 0 16 16" fill="none"><path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              </div>
+            </div>
           </div>
         </section>
 
-        <aside class="glow-card insight-panel">
-          <div class="panel-header"><span class="dot"></span><span>供应商洞察</span></div>
-          <div id="insightPanel" class="insight-body muted">请选择右侧供应商卡片查看评分雷达图与判断。</div>
-        </aside>
+        <div id="insightPanel" class="hidden"></div>
       </section>
 
-      <div class="glow-card markdown-card">
-        <div class="panel-header">
-          <span class="dot"></span>
-          <span>批量汇总（原始 markdown）</span>
-        </div>
-        <pre id="summaryMarkdown" class="markdown-pre"></pre>
-      </div>
+      <pre id="summaryMarkdown" class="hidden"></pre>
     </section>
   </main>
 
   <script src="/app.js"></script>
+  <script>
+  // ===== 模拟数据，用于预览结果页样式（上线前删除）=====
+  (function mockPreview() {
+    const mock = {
+      overview: {
+        total_items: 8, matched_count: 6, fallback_count: 1,
+        supplier_counts: { A: 12, B: 8, C: 5 }
+      },
+      result_cards: [
+        {
+          theme: '法式碎花连衣裙', quality: 'strong', price_band_raw: '¥129–199',
+          brief_summary: '春夏主推法式碎花，主打轻熟甜美风',
+          styles: ['法式', '轻熟甜美'], colors: ['碎花色', '米白', '浅粉'],
+          fabrics: ['雪纺', '涤纶'], elements: ['碎花', '荷叶边', 'V领'],
+          demand_by_month: {'4月': 2000, '5月': 3500},
+          ai_summary: '当前匹配度较高，建议优先推进',
+          recommended_action: '优先推进A类供应商',
+          a_count: 4, b_count: 3, c_count: 2,
+          supplier_groups: {
+            A: [
+              { supplier_name: '杭州锦尚服饰', product_title: '法式碎花V领雪纺连衣裙', product_image: '', price_fit_guess: '¥145', score_total: 87, recommendation_level: 'A', recommend_reasons: ['风格高度匹配','价格带吻合','面料细节契合'], risk_warnings: ['交期需确认'], source_url: '#', shop_url: '#', ai_judgement: '风格与价格带匹配度较高，建议优先推进', radar: {'风格匹配度':88,'价格匹配度':80,'细节契合度':75,'供应可靠度':70,'风险可控度':85} },
+              { supplier_name: '广州衣美针织', product_title: '田园碎花荷叶边连衣裙', product_image: '', price_fit_guess: '¥155', score_total: 82, recommendation_level: 'A', recommend_reasons: ['元素丰富','版型匹配','供应稳定'], risk_warnings: ['最小起订量偏高'], source_url: '#', shop_url: '#', ai_judgement: '风格与价格带匹配度较高，建议优先推进', radar: {'风格匹配度':82,'价格匹配度':78,'细节契合度':80,'供应可靠度':75,'风险可控度':72} },
+              { supplier_name: '嘉兴花漾纺织', product_title: '小碎花泡泡袖A字裙', product_image: '', price_fit_guess: '¥138', score_total: 79, recommendation_level: 'A', recommend_reasons: ['价格优势明显','风格贴近','面料品质稳定'], risk_warnings: [], source_url: '#', shop_url: '#', ai_judgement: '风格与价格带匹配度较高，建议优先推进', radar: {'风格匹配度':80,'价格匹配度':90,'细节契合度':68,'供应可靠度':72,'风险可控度':90} }
+            ],
+            B: [
+              { supplier_name: '苏州云裳制衣', product_title: '碎花方领收腰连衣裙', product_image: '', price_fit_guess: '¥168', score_total: 71, recommendation_level: 'B', recommend_reasons: ['版型较好','有现货'], risk_warnings: ['价格偏高'], source_url: '#', shop_url: '#', ai_judgement: '已有一定匹配度，建议重点复核后推进', radar: {'风格匹配度':70,'价格匹配度':60,'细节契合度':72,'供应可靠度':68,'风险可控度':75} }
+            ],
+            C: [
+              { supplier_name: '东莞美达服装', product_title: '碎花吊带裙', product_image: '', price_fit_guess: '¥98', score_total: 55, recommendation_level: 'C', recommend_reasons: ['价格低'], risk_warnings: ['风格偏差较大','面料品质待验证'], source_url: '#', shop_url: '#', ai_judgement: '可作为补充储备，建议先保留观察', radar: {'风格匹配度':45,'价格匹配度':85,'细节契合度':40,'供应可靠度':50,'风险可控度':55} }
+            ]
+          }
+        },
+        {
+          theme: '休闲阔腿牛仔裤', quality: 'weak', price_band_raw: '¥99–159',
+          brief_summary: '春夏百搭休闲牛仔裤',
+          styles: ['休闲', '街头'], colors: ['深蓝', '浅蓝', '黑色'],
+          fabrics: ['棉', '牛仔'], elements: ['高腰', '阔腿', '毛边'],
+          demand_by_month: {'4月': 1500, '5月': 2000},
+          ai_summary: '已有可跟进候选，建议重点复核',
+          recommended_action: '重点复核后推进',
+          a_count: 1, b_count: 2, c_count: 1,
+          supplier_groups: {
+            A: [{ supplier_name: '中山蓝调牛仔', product_title: '高腰阔腿毛边牛仔裤', product_image: '', price_fit_guess: '¥128', score_total: 76, recommendation_level: 'A', recommend_reasons: ['牛仔面料专业','版型好评率高'], risk_warnings: ['色差风险'], source_url: '#', shop_url: '#', ai_judgement: '风格与价格带匹配度较高，建议优先推进', radar: {'风格匹配度':75,'价格匹配度':80,'细节契合度':70,'供应可靠度':78,'风险可控度':65} }],
+            B: [{ supplier_name: '佛山汇丰制衣', product_title: '直筒阔腿牛仔长裤', product_image: '', price_fit_guess: '¥110', score_total: 68, recommendation_level: 'B', recommend_reasons: ['价格有优势'], risk_warnings: ['版型偏差'], source_url: '#', shop_url: '#', ai_judgement: '已有一定匹配度，建议重点复核后推进', radar: {'风格匹配度':62,'价格匹配度':85,'细节契合度':58,'供应可靠度':65,'风险可控度':70} }],
+            C: []
+          }
+        },
+        {
+          theme: '简约通勤西装外套', quality: 'empty', price_band_raw: '¥199–299',
+          brief_summary: '秋季通勤职场西装',
+          styles: ['简约', '通勤职场'], colors: ['黑色', '卡其', '灰色'],
+          fabrics: ['聚酯纤维', '西装面料'], elements: ['垫肩', '双排扣'],
+          demand_by_month: {'8月': 1000, '9月': 2500},
+          ai_summary: '当前渠道结果偏弱，建议补其他渠道',
+          recommended_action: '建议补其他渠道',
+          a_count: 0, b_count: 0, c_count: 1,
+          supplier_groups: { A: [], B: [], C: [{ supplier_name: '温州正泰服饰', product_title: '双排扣垫肩西装', product_image: '', price_fit_guess: '¥245', score_total: 48, recommendation_level: 'C', recommend_reasons: ['有现货'], risk_warnings: ['价格偏高','风格匹配度低'], source_url: '#', shop_url: '#', ai_judgement: '可作为补充储备，建议先保留观察', radar: {'风格匹配度':40,'价格匹配度':50,'细节契合度':45,'供应可靠度':55,'风险可控度':60} }] }
+        }
+      ],
+      summary_markdown: '## 寻源批量汇总\n\n共识别 8 个企划款，本次优先处理 3 个。\n\n| 企划款 | 匹配质量 | A类 | B类 | C类 |\n|--------|----------|-----|-----|-----|\n| 法式碎花连衣裙 | 强匹配 | 4 | 3 | 2 |\n| 休闲阔腿牛仔裤 | 待复核 | 1 | 2 | 1 |\n| 简约通勤西装外套 | 建议补渠道 | 0 | 0 | 1 |'
+    };
+    homeSection.classList.add('hidden');
+    resultsSection.classList.remove('hidden');
+    renderResults(mock);
+  })();
+  </script>
 </body>
 </html>
