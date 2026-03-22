@@ -63,6 +63,11 @@
                   下载企划模版
                 </a>
               </div>
+              <div id="fileInfo" class="file-info hidden">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5L9 1z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 1v4h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span id="fileName"></span>
+                <button type="button" id="fileClear" class="file-clear" onclick="event.stopPropagation()">&times;</button>
+              </div>
             </label>
 
 
@@ -84,7 +89,6 @@
       <div class="section-title-row">
         <div>
           <div class="eyebrow">任务执行状态</div>
-          <h2>智能体正在处理本次寻源任务</h2>
         </div>
         <div id="jobBadge" class="job-badge">任务队列中</div>
       </div>
@@ -98,10 +102,9 @@
             </svg>
             <div class="ring-center">
               <div id="progressValue" class="progress-value">0%</div>
-              <div class="progress-label">当前进度</div>
             </div>
           </div>
-          <div>
+          <div class="progress-info">
             <div id="stageText" class="stage-text">等待启动</div>
             <div id="fileText" class="muted"></div>
           </div>
@@ -169,6 +172,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Toast 提示 -->
+  <div id="toastContainer" class="toast-container"></div>
 
   <script src="/app.js"></script>
 </body>

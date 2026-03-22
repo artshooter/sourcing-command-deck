@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import random
 import subprocess
 import sys
@@ -64,7 +65,8 @@ def main():
 
                     mtop_out = tmpdir / f'mtop_q{q_idx}_p{page}.json'
                     rows_out = tmpdir / f'rows_q{q_idx}_p{page}.json'
-                    cache_dir = str(Path('/root/.openclaw/workspace/outputs/1688-global-cache'))
+                    _ws = os.environ.get('OPENCLAW_WORKSPACE', str(Path(__file__).resolve().parents[3]))
+                    cache_dir = str(Path(_ws) / 'outputs' / '1688-global-cache')
                     cmd1 = [
                         sys.executable, str(fetch_script),
                         '--query', query,

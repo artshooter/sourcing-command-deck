@@ -23,6 +23,13 @@ const supplierNavInfo = document.getElementById('supplierNavInfo');
 const supplierPrev = document.getElementById('supplierPrev');
 const supplierNext = document.getElementById('supplierNext');
 
+const toastContainer = document.getElementById('toastContainer');
+const fileInfo = document.getElementById('fileInfo');
+const fileNameEl = document.getElementById('fileName');
+const fileClear = document.getElementById('fileClear');
+const planningFile = document.getElementById('planning_file');
+const dropzone = document.querySelector('.dropzone');
+
 const RING_LENGTH = 301.59;
 const SUPPLIERS_PER_PAGE = 6;
 let pollTimer = null;
@@ -88,9 +95,10 @@ function renderPlanList(cards) {
   plannedStrip.innerHTML = cards.map((card, index) => `
     <article class="planned-item ${index === activePlanIndex ? 'active' : ''}" data-plan-index="${index}">
       <div class="planned-top">
-        <div class="theme">${escapeHtml(card.theme || '未命名企划款')}</div>
+        <div class="theme">${escapeHtml(card.category_l3 || card.theme || '未命名')}</div>
+        <div class="plan-tag">${escapeHtml(card.theme || '')}</div>
       </div>
-      <div class="muted small-gap">${escapeHtml(card.price_band_raw || '价格带待定')}</div>
+      <div class="muted small-gap">${card.price_band_raw ? '¥' + escapeHtml(card.price_band_raw) : '价格带待定'}</div>
       <div class="reasons">风格：${escapeHtml((card.styles || []).join(' / ') || '—')}</div>
       <div class="reasons">颜色：${escapeHtml((card.colors || []).join(' / ') || '—')}</div>
       <div class="reasons">面料：${escapeHtml((card.fabrics || []).join(' / ') || '—')}</div>
@@ -120,7 +128,7 @@ function renderBriefCard(card) {
       <div class="quality-badge quality-${escapeHtml(card.quality || 'empty')}">${escapeHtml(qualityLabel(card.quality))}</div>
     </div>
     <div class="brief-grid">
-      <div class="brief-cell"><div class="label">价格带</div><div class="value">${escapeHtml(card.price_band_raw || '—')}</div></div>
+      <div class="brief-cell"><div class="label">价格带</div><div class="value">${card.price_band_raw ? '¥' + escapeHtml(card.price_band_raw) : '—'}</div></div>
       <div class="brief-cell"><div class="label">面料关键词</div><div class="value">${escapeHtml((card.fabrics || []).join(' / ') || '—')}</div></div>
       <div class="brief-cell"><div class="label">元素关键词</div><div class="value">${escapeHtml((card.elements || []).join(' / ') || '—')}</div></div>
       <div class="brief-cell"><div class="label">需求节奏</div><div class="value">${escapeHtml(formatDemand(card.demand_by_month))}</div></div>
@@ -175,7 +183,7 @@ function renderTierSection(card) {
         <div class="supplier-head-row">
           <div class="supplier-name">${escapeHtml(supplier.supplier_name || '未命名商家')}</div>
           <div class="supplier-price-score">
-            <span class="chip">${escapeHtml(supplier.price_fit_guess || '—')}</span>
+            <span class="chip">${supplier.price_fit_guess ? '¥' + escapeHtml(supplier.price_fit_guess) : '—'}</span>
             <div class="score-badge">${escapeHtml(String(supplier.score_total || '—'))}分</div>
           </div>
         </div>
@@ -304,6 +312,37 @@ function renderDeck() {
 }
 
 function renderResults(result) {
+  const briefItems = (result.planning_brief && result.planning_brief.items) || [];
+  (result.result_cards || []).forEach((card) => {
+    const brief = briefItems.find(b => b.theme === card.theme) ||
+                  briefItems[(card.item_index || 1) - 1];
+    if (!brief) return;
+    if (!card.price_band_raw && brief.price_band_raw) card.price_band_raw = brief.price_band_raw;
+    if ((!card.styles || !card.styles.length) && brief.style_raw) card.styles = [brief.style_raw];
+    if ((!card.colors || !card.colors.length) && brief.colors && brief.colors.length) card.colors = brief.colors;
+    if ((!card.fabrics || !card.fabrics.length) && brief.fabrics && brief.fabrics.length) card.fabrics = brief.fabrics;
+    if ((!card.elements || !card.elements.length) && brief.elements && brief.elements.length) card.elements = brief.elements;
+    if ((!card.demand_by_month || !Object.keys(card.demand_by_month).length) && brief.demand_by_month) card.demand_by_month = brief.demand_by_month;
+    if (!card.category_l3 && brief.category_l3) card.category_l3 = brief.category_l3;
+
+    // Dedupe suppliers per tier: keep highest score per supplier_name + shop_url
+    const groups = card.supplier_groups || {};
+    for (const tier of Object.keys(groups)) {
+      const seen = new Map();
+      for (const s of groups[tier]) {
+        const key = (s.supplier_name || '') + '|' + (s.shop_url || '');
+        const existing = seen.get(key);
+        if (!existing || (s.score_total || 0) > (existing.score_total || 0)) {
+          seen.set(key, s);
+        }
+      }
+      groups[tier] = Array.from(seen.values());
+    }
+    card.a_count = (groups.A || []).length;
+    card.b_count = (groups.B || []).length;
+    card.c_count = (groups.C || []).length;
+  });
+
   currentResult = result;
   activePlanIndex = 0;
   activeTier = 'A';
@@ -332,6 +371,7 @@ async function pollJob(jobId) {
     renderResults(data.result);
     submitBtn.disabled = false;
     submitBtn.textContent = '再次启动新任务';
+
     clearTimeout(pollTimer);
     return;
   }
@@ -340,6 +380,7 @@ async function pollJob(jobId) {
     previewBox.textContent = data.error || '执行失败';
     submitBtn.disabled = false;
     submitBtn.textContent = '重新上传并启动';
+    showToast({ type: 'error', title: '任务执行失败', desc: data.error || '请重新上传文件' });
     clearTimeout(pollTimer);
     return;
   }
@@ -383,7 +424,6 @@ async function checkCookieStatus() {
       const date = data.updated_at ? new Date(data.updated_at * 1000).toLocaleString('zh-CN') : '';
       cookieStatus.innerHTML = `<span class="cookie-ok">1688 Cookie 已配置</span> <span class="cookie-date">${date}</span> <button class="cookie-edit-btn" type="button">更新</button>`;
     } else {
-      // Server has no cookie — try to restore from localStorage
       const saved = localStorage.getItem('1688_cookie');
       if (saved) {
         await syncCookieToServer(saved);
@@ -393,7 +433,6 @@ async function checkCookieStatus() {
     }
     cookieStatus.querySelector('.cookie-edit-btn').addEventListener('click', (e) => {
       e.preventDefault();
-      // Pre-fill from localStorage
       const saved = localStorage.getItem('1688_cookie');
       if (saved) cookieInput.value = saved;
       cookieModal.classList.remove('hidden');
@@ -454,7 +493,49 @@ document.querySelector('.modal-overlay')?.addEventListener('click', () => {
 
 checkCookieStatus();
 
-// --- Form submit ---
+/* ── Toast Notification ── */
+function showToast({ type = 'info', title, desc, duration = 4000 }) {
+  const icons = { success: '✓', error: '✗', info: 'ℹ' };
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+    <div class="toast-icon">${icons[type] || icons.info}</div>
+    <div class="toast-body">
+      <div class="toast-title">${title}</div>
+      ${desc ? `<div class="toast-desc">${desc}</div>` : ''}
+    </div>
+    <button class="toast-close" onclick="this.parentElement.classList.add('toast-out');setTimeout(()=>this.parentElement.remove(),300)">&times;</button>
+  `;
+  toastContainer.appendChild(toast);
+  if (duration > 0) {
+    setTimeout(() => {
+      if (toast.parentElement) {
+        toast.classList.add('toast-out');
+        setTimeout(() => toast.remove(), 300);
+      }
+    }, duration);
+  }
+}
+
+/* ── File Selection Feedback ── */
+planningFile.addEventListener('change', () => {
+  const file = planningFile.files[0];
+  if (file) {
+    fileNameEl.textContent = file.name;
+    fileInfo.classList.remove('hidden');
+    dropzone.classList.add('has-file');
+  } else {
+    fileInfo.classList.add('hidden');
+    dropzone.classList.remove('has-file');
+  }
+});
+
+fileClear.addEventListener('click', () => {
+  planningFile.value = '';
+  fileInfo.classList.add('hidden');
+  dropzone.classList.remove('has-file');
+});
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   submitBtn.disabled = true;
@@ -476,8 +557,10 @@ form.addEventListener('submit', async (e) => {
     statusSection.classList.remove('hidden');
     submitBtn.disabled = false;
     submitBtn.textContent = '重新上传并启动';
+    showToast({ type: 'error', title: '上传失败', desc: data.error || '请检查文件格式后重试' });
     return;
   }
+
   submitBtn.textContent = '任务执行中...';
   pollJob(data.job_id);
 });

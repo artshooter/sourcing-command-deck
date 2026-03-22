@@ -424,15 +424,16 @@ input[type="number"]:focus, input[type="text"]:focus {
   min-height: 0;
 }
 
-.progress-card { display: flex; align-items: center; gap: 16px; }
+.progress-card { display: flex; align-items: center; gap: 20px; min-height: 100px; }
 
-.progress-ring-wrap { position: relative; width: 100px; height: 100px; flex-shrink: 0; }
+.progress-ring-wrap { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
 .progress-ring { width: 100%; height: 100%; transform: rotate(-90deg); }
-.ring-bg, .ring-fg { fill: none; stroke-width: 10; }
+.ring-bg, .ring-fg { fill: none; stroke-width: 8; }
 .ring-bg { stroke: rgba(255,255,255,.05); }
 .ring-fg { stroke: url(#ringGrad) var(--coral); stroke-linecap: round; stroke-dasharray: 301.59; stroke-dashoffset: 301.59; transition: stroke-dashoffset .5s var(--ease); }
-.ring-center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
-.progress-value { font-size: 28px; font-weight: 800; color: #fff; }
+.ring-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.progress-value { font-size: 20px; font-weight: 800; color: #fff; }
+.progress-info { flex: 1; min-width: 0; overflow: hidden; }
 .stage-text { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
 .preview-box { min-height: 80px; white-space: pre-wrap; line-height: 1.7; font-size: 14px; color: rgba(255,255,255,.65); }
 
@@ -562,6 +563,11 @@ input[type="number"]:focus, input[type="text"]:focus {
 }
 
 .theme { font-size: 15px; font-weight: 700; color: #fff; }
+.plan-tag {
+  flex-shrink: 0; font-size: 12px; font-weight: 600;
+  color: var(--brand, #e89a0c); background: rgba(232,154,12,.1);
+  padding: 2px 8px; border-radius: 6px; white-space: nowrap;
+}
 .small-gap { margin: 4px 0 6px; font-size: 16px; }
 .reasons { color: rgba(255,255,255,.65); font-size: 14px; line-height: 1.5; }
 
@@ -879,3 +885,67 @@ input[type="number"]:focus, input[type="text"]:focus {
 .modal.hidden { display: none; }
 .modal-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
 .modal-content { position: relative; width: 90%; max-width: 520px; padding: 20px; }
+
+/* ══════════ Toast Notification ══════════ */
+.toast-container {
+  position: fixed; top: 24px; right: 24px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 10px;
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; border-radius: 12px;
+  background: #fff; color: #1a1a2e;
+  box-shadow: 0 8px 32px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.06);
+  border-left: 4px solid var(--brand, #e89a0c);
+  font-size: 14px; font-weight: 500; line-height: 1.4;
+  pointer-events: auto;
+  animation: toastIn .4s cubic-bezier(.22,1,.36,1) forwards;
+  max-width: 380px;
+}
+.toast.toast-out {
+  animation: toastOut .3s ease forwards;
+}
+.toast-icon {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.toast-success .toast-icon { background: rgba(5,150,105,.1); color: #059669; }
+.toast-error .toast-icon { background: rgba(225,29,72,.1); color: #e11d48; }
+.toast-info .toast-icon { background: rgba(232,154,12,.1); color: #e89a0c; }
+.toast-body { flex: 1; }
+.toast-title { font-weight: 700; margin-bottom: 2px; }
+.toast-desc { font-size: 13px; color: rgba(0,0,0,.5); }
+.toast-close {
+  flex-shrink: 0; background: none; border: none; cursor: pointer;
+  color: rgba(0,0,0,.25); font-size: 18px; padding: 0 0 0 8px; line-height: 1;
+  transition: color .2s;
+}
+.toast-close:hover { color: rgba(0,0,0,.6); }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(40px) scale(.95); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to { opacity: 0; transform: translateX(40px) scale(.9); }
+}
+
+/* ══════════ File Selected State ══════════ */
+.file-info {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 10px; padding: 8px 14px; border-radius: 8px;
+  background: rgba(232,154,12,.08); border: 1px solid rgba(232,154,12,.2);
+  color: #e89a0c; font-size: 13px; font-weight: 600;
+}
+.file-info svg { flex-shrink: 0; color: #e89a0c; }
+.file-info span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-clear {
+  flex-shrink: 0; background: none; border: none; cursor: pointer;
+  color: rgba(232,154,12,.5); font-size: 18px; line-height: 1;
+  padding: 0; transition: color .2s;
+}
+.file-clear:hover { color: #e89a0c; }
+.dropzone.has-file { border-color: rgba(232,154,12,.4); background: rgba(232,154,12,.03); }
