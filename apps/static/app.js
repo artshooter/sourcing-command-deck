@@ -420,15 +420,10 @@ async function checkCookieStatus() {
   try {
     const res = await fetch('/api/cookie/status');
     const data = await res.json();
-    if (data.exists) {
+    if (data.exists && data.length > 0) {
       const date = data.updated_at ? new Date(data.updated_at * 1000).toLocaleString('zh-CN') : '';
       cookieStatus.innerHTML = `<span class="cookie-ok">1688 Cookie 已配置</span> <span class="cookie-date">${date}</span> <button class="cookie-edit-btn" type="button">更新</button>`;
     } else {
-      const saved = localStorage.getItem('1688_cookie');
-      if (saved) {
-        await syncCookieToServer(saved);
-        return;
-      }
       cookieStatus.innerHTML = `<span class="cookie-missing">1688 Cookie 未配置</span> <button class="cookie-edit-btn" type="button">配置 Cookie</button>`;
     }
     cookieStatus.querySelector('.cookie-edit-btn').addEventListener('click', (e) => {

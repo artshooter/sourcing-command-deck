@@ -526,12 +526,17 @@ class AppHandler(BaseHTTPRequestHandler):
             })
 
         if path == '/api/cookie/status':
-            exists = COOKIE_PATH.exists()
-            info = {'exists': exists, 'updated_at': None, 'length': 0}
-            if exists:
-                stat = COOKIE_PATH.stat()
-                info['updated_at'] = int(stat.st_mtime)
-                info['length'] = stat.st_size
+            info = {'exists': False, 'updated_at': None, 'length': 0}
+            if COOKIE_PATH.exists():
+                try:
+                    content = COOKIE_PATH.read_text(encoding='utf-8').strip()
+                    if content:
+                        stat = COOKIE_PATH.stat()
+                        info['exists'] = True
+                        info['updated_at'] = int(stat.st_mtime)
+                        info['length'] = len(content)
+                except Exception:
+                    pass
             return self._send_json(info)
 
         if path == '/api/template-spec':
