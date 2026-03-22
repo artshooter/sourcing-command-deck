@@ -422,14 +422,21 @@ async function checkCookieStatus() {
     const data = await res.json();
     if (data.exists && data.length > 0) {
       const date = data.updated_at ? new Date(data.updated_at * 1000).toLocaleString('zh-CN') : '';
-      cookieStatus.innerHTML = `<span class="cookie-ok">1688 Cookie 已配置</span> <span class="cookie-date">${date}</span> <button class="cookie-edit-btn" type="button">更新</button>`;
+      cookieStatus.innerHTML = `<span class="cookie-ok">1688 Cookie 已配置</span> <span class="cookie-date">${date}</span> <button class="cookie-edit-btn" type="button">更新</button> <button class="cookie-clear-btn" type="button">清除</button>`;
+      cookieStatus.querySelector('.cookie-clear-btn').addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!confirm('确认清除 Cookie？')) return;
+        try {
+          await fetch('/api/cookie', { method: 'DELETE' });
+          localStorage.removeItem('1688_cookie');
+          checkCookieStatus();
+        } catch (_) {}
+      });
     } else {
       cookieStatus.innerHTML = `<span class="cookie-missing">1688 Cookie 未配置</span> <button class="cookie-edit-btn" type="button">配置 Cookie</button>`;
     }
     cookieStatus.querySelector('.cookie-edit-btn').addEventListener('click', (e) => {
       e.preventDefault();
-      const saved = localStorage.getItem('1688_cookie');
-      if (saved) cookieInput.value = saved;
       cookieModal.classList.remove('hidden');
     });
   } catch (e) {

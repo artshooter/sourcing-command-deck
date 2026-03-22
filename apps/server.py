@@ -577,6 +577,20 @@ class AppHandler(BaseHTTPRequestHandler):
         static_path = path.lstrip('/')
         return self._serve_static(static_path)
 
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path == '/api/cookie':
+            try:
+                if COOKIE_PATH.exists():
+                    COOKIE_PATH.unlink()
+                return self._send_json({'ok': True})
+            except Exception as e:
+                return self._send_json({'error': str(e)}, 500)
+
+        self.send_error(404)
+
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
