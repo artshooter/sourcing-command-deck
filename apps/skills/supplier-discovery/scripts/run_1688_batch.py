@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import random
 import subprocess
 import sys
 import tempfile
@@ -54,9 +55,11 @@ def main():
             tmpdir = Path(tmpdir)
             for q_idx, query in enumerate(query_list, start_rank):
                 for page in range(1, args.pages + 1):
-                    # Throttle: 2s between requests to avoid triggering 1688 risk control
+                    # Throttle: random delay between requests to avoid triggering 1688 risk control
                     if _request_count[0] > 0:
-                        time.sleep(2)
+                        delay = random.uniform(5, 12)
+                        print(f'[batch] item={args.item_index} throttle sleep {delay:.1f}s', file=sys.stderr)
+                        time.sleep(delay)
                     _request_count[0] += 1
 
                     mtop_out = tmpdir / f'mtop_q{q_idx}_p{page}.json'
@@ -73,11 +76,15 @@ def main():
                         '--out', str(mtop_out),
                     ]
                     r1 = subprocess.run(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+                    if r1.stderr:
+                        sys.stderr.write(r1.stderr)
                     if r1.returncode != 0:
+                        print(f'[batch] item={args.item_index} fetch failed: {r1.stderr.strip()[:200]}', file=sys.stderr)
                         continue
 
                     # Cookie blocked — abort immediately, no point sending more requests
                     if _is_cookie_blocked(mtop_out):
+                        print(f'[batch] item={args.item_index} cookie blocked, aborting', file=sys.stderr)
                         return local_rows
 
                     rv = subprocess.run([sys.executable, str(validate_script), str(mtop_out)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
@@ -92,6 +99,7 @@ def main():
                     ]
                     r2 = subprocess.run(cmd2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
                     if r2.returncode != 0:
+                        print(f'[batch] item={args.item_index} extract failed: {r2.stderr.strip()[:200]}', file=sys.stderr)
                         continue
                     data = json.loads(rows_out.read_text(encoding='utf-8'))
                     for row in data.get('candidate_rows', []):
@@ -101,9 +109,11 @@ def main():
         return local_rows
 
     all_rows.extend(fetch_and_extract(queries, start_rank=1))
+    print(f'[batch] item={args.item_index} first-pass rows={len(all_rows)}', file=sys.stderr)
 
     # fallback: if nothing was recalled, switch to broader/lower-risk queries
     if not all_rows:
+        print(f'[batch] item={args.item_index} triggering fallback queries', file=sys.stderr)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             fb_json = tmpdir / 'fallback.json'
@@ -114,6 +124,7 @@ def main():
             if fb_json.exists():
                 fallback_queries = json.loads(fb_json.read_text(encoding='utf-8')).get('fallback_queries', [])
                 all_rows.extend(fetch_and_extract(fallback_queries[: args.queries], start_rank=100))
+        print(f'[batch] item={args.item_index} fallback rows={len(all_rows)}', file=sys.stderr)
 
     out = {'candidate_rows': all_rows}
     out_path = Path(args.out)

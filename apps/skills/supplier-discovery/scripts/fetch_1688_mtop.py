@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -93,6 +94,7 @@ def main():
         cache_path = cache_dir / f'{qhash}.json'
 
     cookie = read_cookie(Path(args.cookie_file))
+    print(f'[fetch] cookie_file={args.cookie_file} length={len(cookie)}', file=sys.stderr)
     last_err = None
     obj = None
     blocked = False
@@ -105,15 +107,19 @@ def main():
                 blocked = True
                 last_err = 'FAIL_SYS_USER_VALIDATE'
                 obj = raw
+                print(f'[1688] BLOCKED query={args.query!r} page={args.begin_page} ret={ret}', file=sys.stderr)
                 break
             try:
                 offer = raw.get('data', {}).get('data', {}).get('OFFER', {})
                 if offer.get('items'):
                     obj = raw
+                    item_count = len(offer['items'])
+                    print(f'[1688] OK query={args.query!r} page={args.begin_page} items={item_count}', file=sys.stderr)
                     if cache_path:
                         cache_path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding='utf-8')
                     break
                 else:
+                    print(f'[1688] EMPTY query={args.query!r} page={args.begin_page} ret={ret}', file=sys.stderr)
                     obj = None
             except Exception:
                 obj = None
@@ -121,6 +127,7 @@ def main():
                 break
         except Exception as e:
             last_err = str(e)
+            print(f'[1688] ERROR query={args.query!r} attempt={attempt} err={e}', file=sys.stderr)
             time.sleep(min(2 * attempt, 6))
 
     if obj is None and not blocked and cache_path and cache_path.exists():

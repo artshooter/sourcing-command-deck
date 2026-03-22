@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import random
 import subprocess
 import sys
 import time
@@ -75,7 +76,7 @@ def main():
                 'status': 'error',
                 'error': str(e),
             })
-        time.sleep(2)
+        time.sleep(random.uniform(8, 15))
 
     out = {'rerun_results': results}
     out_path = base / 'rerun-summary.json'

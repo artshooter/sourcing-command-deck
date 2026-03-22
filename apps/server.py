@@ -248,6 +248,8 @@ def build_dashboard(job_dir, auto_summary, llm_report=None):
             'category_l3': brief_item.get('category_l3', ''),
             'brief_summary': result.get('brief_summary', ''),
             'price_band_raw': brief_item.get('price_band_raw', ''),
+            'styles': brief_item.get('styles', [])[:4] or [s.strip() for s in (brief_item.get('style_raw') or '').replace('，', ',').replace('/', ',').replace('、', ',').split(',') if s.strip()][:4],
+            'colors': brief_item.get('colors', [])[:4],
             'fabrics': brief_item.get('fabrics', [])[:4],
             'elements': brief_item.get('elements', [])[:4],
             'demand_by_month': brief_item.get('demand_by_month', {}),
@@ -386,6 +388,7 @@ def run_job(job_id):
             '--workdir', str(workdir),
         ]
         update_job(job_id, stage='正在执行自动批量 workflow', progress=55)
+        print(f'[job:{job_id}] batch workflow starting', file=sys.stderr)
         proc = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
@@ -394,6 +397,9 @@ def run_job(job_id):
             cwd=str(WORKSPACE),
             env=env,
         )
+        if proc.stderr:
+            for line in proc.stderr.splitlines():
+                print(f'[job:{job_id}] {line}', file=sys.stderr)
         if proc.returncode != 0:
             raise RuntimeError(proc.stderr or proc.stdout or 'Workflow failed')
         out_path = (proc.stdout or '').strip().splitlines()[-1].strip()
@@ -611,8 +617,11 @@ class AppHandler(BaseHTTPRequestHandler):
                 with io.open(str(cookie_file), 'w', encoding='utf-8') as f:
                     f.write(cookie_value)
                 cookie_path = str(cookie_file)
+                print(f'[cookie] source=form length={len(cookie_value)} path={cookie_path}', file=sys.stderr)
             elif COOKIE_PATH.exists():
                 cookie_path = str(COOKIE_PATH)
+                cookie_len = COOKIE_PATH.stat().st_size
+                print(f'[cookie] source=server_file length={cookie_len} path={cookie_path}', file=sys.stderr)
             else:
                 return self._send_json({'error': '1688 Cookie 未填写，请在页面上配置 Cookie'}, 400)
 

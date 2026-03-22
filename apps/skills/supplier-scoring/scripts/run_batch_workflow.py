@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import random
 import subprocess
 import sys
 import time
@@ -17,6 +18,8 @@ def detect_workspace():
 
 def run(cmd):
     r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    if r.stderr:
+        sys.stderr.write(r.stderr)
     if r.returncode != 0:
         raise RuntimeError(f"Command failed: {' '.join(cmd)}\nSTDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}")
     return r.stdout.strip()
@@ -76,7 +79,7 @@ def main():
                 'status': 'error',
                 'error': str(e),
             })
-        time.sleep(2)
+        time.sleep(random.uniform(8, 15))
 
     out = {'batch_results': results}
     out_path = base / 'batch-summary.json'

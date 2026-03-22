@@ -17,6 +17,8 @@ def detect_workspace():
 
 def run(cmd):
     r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    if r.stderr:
+        sys.stderr.write(r.stderr)
     if r.returncode != 0:
         raise RuntimeError(f"Command failed: {' '.join(cmd)}\nSTDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}")
     return r.stdout.strip()
