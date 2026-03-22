@@ -497,6 +497,10 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(data)))
+        if suffix == '.html':
+            self.send_header('Cache-Control', 'no-store')
+        else:
+            self.send_header('Cache-Control', 'public, max-age=31536000, immutable')
         self.end_headers()
         self.wfile.write(data)
 
