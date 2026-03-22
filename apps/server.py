@@ -105,6 +105,51 @@ def load_job(job_id):
         return JOBS.get(job_id)
 
 
+def probe_1688_cookie(cookie_str):
+    """探针验证 cookie 是否被 1688 风控拦截，返回 (ok, ret_list)。"""
+    import hashlib
+    import re
+    import urllib.parse
+    import urllib.request
+    APP_KEY = '12574478'
+    API = 'mtop.relationrecommend.WirelessRecommend.recommend'
+    query = '连衣裙'
+    try:
+        m = re.search(r'_m_h5_tk=([^_;]+)_', cookie_str) or re.search(r'_m_h5_tk=([^;]+)', cookie_str)
+        if not m:
+            return False, ['COOKIE_FORMAT_ERROR: missing _m_h5_tk']
+        token = m.group(1)
+        ts = str(int(time.time() * 1000))
+        params_obj = {
+            'beginPage': 1, 'pageSize': 10, 'method': 'getOfferList',
+            'pageId': f'page_{ts}', 'keywords': query,
+            'verticalProductFlag': 'pcmarket', 'searchScene': 'pcOfferSearch', 'charset': 'GBK',
+        }
+        data_obj = {'appId': 32517, 'params': json.dumps(params_obj, ensure_ascii=False)}
+        data = json.dumps(data_obj, ensure_ascii=False, separators=(',', ':'))
+        sig = hashlib.md5(f'{token}&{ts}&{APP_KEY}&{data}'.encode('utf-8')).hexdigest()
+        qs = urllib.parse.urlencode({
+            'jsv': '2.7.2', 'appKey': APP_KEY, 't': ts, 'sign': sig,
+            'api': API, 'v': '2.0', 'type': 'originaljson', 'dataType': 'json',
+            'timeout': '20000', 'ecode': '0', 'valueType': 'original', 'data': data,
+        })
+        url = f'https://h5api.m.1688.com/h5/{API.lower()}/2.0/?{qs}'
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'application/json,text/plain,*/*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Cookie': cookie_str,
+            'Referer': 'https://s.1688.com/selloffer/offer_search.htm?keywords=' + urllib.parse.quote(query),
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = json.loads(resp.read().decode('utf-8', errors='replace'))
+        ret = raw.get('ret') or []
+        blocked = any('FAIL_SYS_USER_VALIDATE' in r for r in ret)
+        return not blocked, ret
+    except Exception as e:
+        return False, [f'PROBE_ERROR: {e}']
+
+
 # ---------------------------------------------------------------------------
 # Dashboard builder
 # ---------------------------------------------------------------------------
@@ -631,6 +676,21 @@ class AppHandler(BaseHTTPRequestHandler):
 
             # Cookie: prefer form-submitted value, fallback to server file
             cookie_value = (form.getfirst('cookie_value', '') or '').strip()
+            if cookie_value:
+                probe_str = cookie_value
+            elif COOKIE_PATH.exists():
+                probe_str = COOKIE_PATH.read_text(encoding='utf-8').strip()
+            else:
+                return self._send_json({'error': '1688 Cookie 未填写，请在页面上配置 Cookie'}, 400)
+
+            # 探针验证 cookie，失败直接拒绝，不创建 job
+            ok, ret = probe_1688_cookie(probe_str)
+            if not ok:
+                return self._send_json({
+                    'error': 'Cookie 已失效，1688 验证不通过，请重新获取',
+                    'detail': ret,
+                }, 422)
+
             job_id = time.strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:8]
             job_dir = RUNS_DIR / job_id
             job_dir.mkdir(parents=True, exist_ok=True)
@@ -641,12 +701,10 @@ class AppHandler(BaseHTTPRequestHandler):
                     f.write(cookie_value)
                 cookie_path = str(cookie_file)
                 print(f'[cookie] source=form length={len(cookie_value)} path={cookie_path}', file=sys.stderr)
-            elif COOKIE_PATH.exists():
+            else:
                 cookie_path = str(COOKIE_PATH)
                 cookie_len = COOKIE_PATH.stat().st_size
                 print(f'[cookie] source=server_file length={cookie_len} path={cookie_path}', file=sys.stderr)
-            else:
-                return self._send_json({'error': '1688 Cookie 未填写，请在页面上配置 Cookie'}, 400)
 
             xlsx_path = job_dir / filename
             with io.open(str(xlsx_path), 'wb') as f:
