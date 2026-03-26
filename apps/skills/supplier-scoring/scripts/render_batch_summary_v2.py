@@ -4,19 +4,23 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from scoring_levels import A_LEVEL_MIN_SCORE, B_LEVEL_MIN_SCORE
+
 
 def load_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
-def grade_item(top_rows):
+def grade_item(top_rows, dist=None):
     if not top_rows:
         return 'empty'
+    dist = dist or {}
     top1 = top_rows[0].get('score_total', 0)
     count = len(top_rows)
-    if top1 >= 45 and count >= 5:
+    level_counts = dist.get('level_counts', {}) or {}
+    if top1 >= A_LEVEL_MIN_SCORE and level_counts.get('A', 0) >= 2:
         return 'strong'
-    if top1 >= 30 and count >= 3:
+    if top1 >= B_LEVEL_MIN_SCORE and count >= 3:
         return 'usable'
     return 'weak'
 
@@ -38,6 +42,12 @@ def main():
     err_items = [x for x in items if x.get('status') != 'ok']
     lines.append(f'- 成功 item 数：{len(ok_items)}')
     lines.append(f'- 失败 item 数：{len(err_items)}')
+    batch_dist = batch.get('batch_distribution') or {}
+    if batch_dist:
+        level_counts = batch_dist.get('level_counts', {}) or {}
+        lines.append(f"- 分层汇总：A {level_counts.get('A', 0)} / B {level_counts.get('B', 0)} / C {level_counts.get('C', 0)} / D {level_counts.get('D', 0)}")
+        for warning in (batch_dist.get('warnings') or [])[:3]:
+            lines.append(f"- 分层提示：{warning}")
     lines.append('')
 
     repeated = defaultdict(list)
@@ -51,7 +61,8 @@ def main():
         except Exception:
             top_rows = []
 
-        quality = grade_item(top_rows)
+        dist = item.get('score_distribution') or {}
+        quality = grade_item(top_rows, dist)
         top1 = top_rows[0].get('score_total', 0) if top_rows else 0
         item_summaries.append({
             'item_index': item.get('item_index'),
@@ -61,6 +72,7 @@ def main():
             'top1_score': top1,
             'shortlist_md': item.get('shortlist_md', ''),
             'top_rows': top_rows,
+            'score_distribution': dist,
         })
 
         for row in top_rows[:10]:
@@ -80,6 +92,8 @@ def main():
     for s in sorted(item_summaries, key=lambda x: (x['quality'], x['top1_score']), reverse=True):
         lines.append(f"- Item {s['item_index']} | 质量：{s['quality']} | Top数：{s['top_count']} | Top1分数：{s['top1_score']}")
         lines.append(f"  - Brief：{s['brief_summary']}")
+        dist_counts = (s.get('score_distribution') or {}).get('level_counts', {}) or {}
+        lines.append(f"  - 分层：A {dist_counts.get('A', 0)} / B {dist_counts.get('B', 0)} / C {dist_counts.get('C', 0)} / D {dist_counts.get('D', 0)}")
         lines.append(f"  - shortlist：{s['shortlist_md']}")
     lines.append('')
 
@@ -90,6 +104,9 @@ def main():
     for s in best_items:
         lines.append(f"### Item {s['item_index']} | {s['quality']} | Top1 {s['top1_score']}")
         lines.append(f"- Brief：{s['brief_summary']}")
+        warnings = (s.get('score_distribution') or {}).get('warnings', []) or []
+        if warnings:
+            lines.append(f"- 分层提示：{'；'.join(warnings[:2])}")
         if s['top_rows']:
             row = s['top_rows'][0]
             lines.append(f"- 最优商家：{row.get('supplier_name', '')} | {row.get('recommendation_level', '')} | {row.get('score_total', '')} | 价格 {row.get('price_fit_guess', '')}")

@@ -25,6 +25,38 @@ def run(cmd):
     return r.stdout.strip()
 
 
+def aggregate_batch_distribution(results):
+    level_counts = {'A': 0, 'B': 0, 'C': 0, 'D': 0}
+    total_rows = 0
+    warnings = []
+    for item in results:
+        if item.get('status') != 'ok':
+            continue
+        dist = item.get('score_distribution') or {}
+        total_rows += int(dist.get('total_rows', 0) or 0)
+        for level in level_counts:
+            level_counts[level] += int((dist.get('level_counts') or {}).get(level, 0) or 0)
+        warnings.extend(dist.get('warnings', []) or [])
+
+    unique_warnings = []
+    seen = set()
+    for warning in warnings:
+        if warning not in seen:
+            unique_warnings.append(warning)
+            seen.add(warning)
+
+    ratios = {}
+    for level, count in level_counts.items():
+        ratios[level] = round(float(count) / float(total_rows), 4) if total_rows else 0.0
+
+    return {
+        'total_rows': total_rows,
+        'level_counts': level_counts,
+        'level_ratios': ratios,
+        'warnings': unique_warnings,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser(description='Run end-to-end sourcing workflow for multiple brief items from one planning file.')
     ap.add_argument('--xlsx', required=True)
@@ -72,6 +104,8 @@ def main():
                 'top_json': summary.get('top_json', ''),
                 'shortlist_md': summary.get('shortlist_md', ''),
                 'top_count': len(top_json.get('top_suppliers', [])),
+                'score_distribution_json': summary.get('score_distribution_json', ''),
+                'score_distribution': summary.get('score_distribution', {}),
             })
         except Exception as e:
             results.append({
@@ -81,7 +115,10 @@ def main():
             })
         time.sleep(random.uniform(8, 15))
 
-    out = {'batch_results': results}
+    out = {
+        'batch_results': results,
+        'batch_distribution': aggregate_batch_distribution(results),
+    }
     out_path = base / 'batch-summary.json'
     out_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding='utf-8')
 

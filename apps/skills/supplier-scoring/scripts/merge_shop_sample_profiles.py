@@ -3,6 +3,8 @@ import argparse
 import json
 from pathlib import Path
 
+from scoring_levels import refresh_rows_recommendation_levels
+
 
 def main():
     ap = argparse.ArgumentParser(description='Merge shop sample profiles into scored supplier rows by shop_url or supplier_name.')
@@ -53,6 +55,8 @@ def main():
             row['recommend_reasons'].insert(0, '同店铺多个商品样本与企划方向一致')
         elif delta < 0:
             row['risk_warnings'].insert(0, '同店铺样本显示整体风格一致性不足或存在漂移')
+
+    refresh_rows_recommendation_levels(scored.get('scored_rows', []))
 
     scored['scored_rows'].sort(key=lambda x: x.get('score_total', 0), reverse=True)
     out_path = Path(args.out)

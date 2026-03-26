@@ -35,7 +35,7 @@ Recommended first-pass buckets:
 
 ## Recommendation levels
 
-- `A`: high priority
-- `B`: strong backup
-- `C`: watchlist / conditional
+- `A`: high priority, requires `score_total >= 48` and strong fundamentals (`theme_style >= 20`, `price_fit >= 6`, `risk_penalty >= -7`)
+- `B`: strong backup, used for rows with `score_total >= 36` that are promising but not strong enough for `A`
+- `C`: watchlist / conditional, used for rows with `score_total >= 24`
 - `D`: not recommended

@@ -23,6 +23,12 @@ def main():
     err_count = sum(1 for x in batch.get('batch_results', []) if x.get('status') != 'ok')
     lines.append(f'- 成功 item 数：{ok_count}')
     lines.append(f'- 失败 item 数：{err_count}')
+    batch_dist = batch.get('batch_distribution') or {}
+    if batch_dist:
+        level_counts = batch_dist.get('level_counts', {}) or {}
+        lines.append(f"- 分层汇总：A {level_counts.get('A', 0)} / B {level_counts.get('B', 0)} / C {level_counts.get('C', 0)} / D {level_counts.get('D', 0)}")
+        for warning in (batch_dist.get('warnings') or [])[:3]:
+            lines.append(f"- 分层提示：{warning}")
     lines.append('')
 
     for item in batch.get('batch_results', []):
@@ -39,6 +45,13 @@ def main():
         lines.append(f"- shortlist：{item.get('shortlist_md', '')}")
         lines.append(f"- top_json：{item.get('top_json', '')}")
         lines.append(f"- Top 数量：{item.get('top_count', 0)}")
+        dist = item.get('score_distribution') or {}
+        if dist:
+            level_counts = dist.get('level_counts', {}) or {}
+            lines.append(f"- 分层分布：A {level_counts.get('A', 0)} / B {level_counts.get('B', 0)} / C {level_counts.get('C', 0)} / D {level_counts.get('D', 0)}")
+            warnings = dist.get('warnings') or []
+            if warnings:
+                lines.append(f"- 分层提示：{'；'.join(warnings[:2])}")
 
         try:
             top = load_json(item.get('top_json', ''))

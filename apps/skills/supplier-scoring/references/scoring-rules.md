@@ -25,6 +25,20 @@ Use lightweight, explainable scoring before any complex model.
 - Quantity ladder present: positive
 - Higher booked count: weak positive
 
+## Recommendation thresholds
+
+- `A`: `score_total >= 48`, `theme_style >= 20`, `price_fit >= 6`, and `risk_penalty >= -7`
+- `B`: `score_total >= 36`
+- `C`: `score_total >= 24`
+- `D`: everything else
+
+## A-level quality bar
+
+- A supplier should not enter `A` by relying on one strong dimension alone
+- Theme/style fit must be clearly established
+- Price fit must be at least workable for immediate follow-up
+- Risk must stay within a controllable range
+
 ## Negative signals
 
 ### Forbidden / conflict

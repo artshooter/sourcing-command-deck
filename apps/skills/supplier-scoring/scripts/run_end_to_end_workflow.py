@@ -93,10 +93,14 @@ def main():
     final_scored_json = base / 'scored-final.json'
     run([sys.executable, str(s3 / 'merge_shop_sample_profiles.py'), str(enriched_json), str(multi_profiles_json), '--out', str(final_scored_json)])
 
+    score_distribution_json = base / 'score-distribution.json'
+    run([sys.executable, str(s3 / 'analyze_score_distribution.py'), str(final_scored_json), '--out', str(score_distribution_json)])
+
     top_json = base / 'top-suppliers.json'
     shortlist_md = base / 'shortlist.md'
     run([sys.executable, str(s3 / 'select_top_suppliers.py'), str(final_scored_json), '--top-k', str(args.top_k), '--out', str(top_json)])
     run([sys.executable, str(s3 / 'render_shortlist.py'), str(final_scored_json), '--top-k', str(args.top_k), '--out', str(shortlist_md)])
+    score_distribution = json.loads(score_distribution_json.read_text(encoding='utf-8'))
 
     summary = {
         'brief_json': str(brief_json),
@@ -106,6 +110,8 @@ def main():
         'multi_shops_json': str(multi_shops_json),
         'scored_json': str(scored_json),
         'final_scored_json': str(final_scored_json),
+        'score_distribution_json': str(score_distribution_json),
+        'score_distribution': score_distribution,
         'top_json': str(top_json),
         'shortlist_md': str(shortlist_md),
     }

@@ -3,6 +3,8 @@ import argparse
 import json
 from pathlib import Path
 
+from scoring_levels import classify_recommendation_level
+
 
 def load_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
@@ -154,14 +156,7 @@ def score_row(row, brief):
     breakdown['risk_penalty'] = risk_penalty
 
     total = sum(breakdown.values())
-    if total >= 35:
-        level = 'A'
-    elif total >= 24:
-        level = 'B'
-    elif total >= 12:
-        level = 'C'
-    else:
-        level = 'D'
+    level = classify_recommendation_level(total, breakdown)
 
     profile_bits = []
     if row.get('supplier_name'):
